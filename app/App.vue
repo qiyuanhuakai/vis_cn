@@ -125,12 +125,10 @@ const HISTORY_LIMIT = 60;
 const FOLLOW_THRESHOLD_PX = 24;
 const TOOL_PENDING_TTL_MS = 60_000;
 const TOOL_RUNNING_TTL_MS = 5_000;
-const REASONING_TTL_MS = 10_000;
 const TOOL_SCROLL_SPEED_PX_S = 2000;
 const TOOL_SCROLL_HOLD_MS = 250;
 const TOOL_SCROLL_MAX_DURATION_S = 3;
 const SUBAGENT_ACTIVE_TTL_MS = 60 * 60 * 1000;
-const SUBAGENT_IDLE_TTL_MS = 30_000;
 const MAIN_REASONING_TITLES = ['Reasoning...', 'Thinking...', 'Working...'];
 const SHELL_PTY_STORAGE_KEY = 'opencode.shellPtys';
 const SHIKI_LANGS = [
@@ -594,13 +592,13 @@ function getSubagentExpiry(sessionId?: string) {
   if (stored !== undefined) return stored;
   const status = sessionStatusById.get(sessionId);
   if (status === 'busy') return Number.MAX_SAFE_INTEGER;
-  if (status === 'idle') return now + SUBAGENT_IDLE_TTL_MS;
+  if (status === 'idle') return now;
   return now + SUBAGENT_ACTIVE_TTL_MS;
 }
 
 function updateSubagentExpiry(sessionId: string, status: 'busy' | 'idle') {
   const now = Date.now();
-  const expiresAt = status === 'idle' ? now + SUBAGENT_IDLE_TTL_MS : Number.MAX_SAFE_INTEGER;
+  const expiresAt = status === 'idle' ? now : Number.MAX_SAFE_INTEGER;
   subagentSessionExpiry.set(sessionId, expiresAt);
   queue.value.forEach((entry) => {
     if (entry.sessionId === sessionId && entry.isSubagentMessage) {
@@ -614,9 +612,7 @@ function updateReasoningExpiry(sessionId: string | undefined, status: 'busy' | '
   const targetSessionId = sessionId ?? selectedSessionId.value;
   if (!targetSessionId) return;
   const now = Date.now();
-  const isMainSession = targetSessionId === selectedSessionId.value;
-  const idleTtl = isMainSession ? REASONING_TTL_MS : SUBAGENT_IDLE_TTL_MS;
-  const nextExpiresAt = status === 'busy' ? Number.MAX_SAFE_INTEGER : now + idleTtl;
+  const nextExpiresAt = status === 'busy' ? Number.MAX_SAFE_INTEGER : now;
   queue.value.forEach((entry) => {
     if (!entry.isReasoning) return;
     const matchesSession =
@@ -1495,6 +1491,16 @@ watch(selectedSessionId, () => {
     void restoreShellSessions(selectedSessionId.value);
   }
 });
+
+watch(
+  isThinking,
+  (active) => {
+    if (active) return;
+    if (!selectedSessionId.value) return;
+    updateReasoningExpiry(selectedSessionId.value, 'idle');
+  },
+  { immediate: true },
+);
 
 watch(selectedModel, () => {
   const selectedInfo = modelOptions.value.find((model) => model.id === selectedModel.value);
@@ -2915,10 +2921,12 @@ function connect() {
             (sessionId === selectedSessionId.value ? selectedSessionStatus.value : undefined)
           : selectedSessionStatus.value
         : undefined;
-      const reasoningIdleTtl =
-        sessionId && sessionId !== selectedSessionId.value ? SUBAGENT_IDLE_TTL_MS : REASONING_TTL_MS;
+      const isMainReasoning = isReasoning && (!sessionId || sessionId === selectedSessionId.value);
+      const effectiveReasoningStatus =
+        reasoningStatus ?? (isMainReasoning && isThinking.value ? 'busy' : undefined);
+      const reasoningIdleTtl = 0;
       const expiresAt = isReasoning
-        ? reasoningStatus === 'busy'
+        ? effectiveReasoningStatus === 'busy'
           ? Number.MAX_SAFE_INTEGER
           : time + reasoningIdleTtl
         : isSubagentMessage
