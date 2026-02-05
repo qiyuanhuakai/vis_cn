@@ -60,8 +60,8 @@
             v-model="thinkingValue"
             class="control-input"
             :disabled="!hasThinkingOptions"
-            aria-label="Thinking"
-            title="Thinking"
+            aria-label="Variant"
+            title="Variant"
           >
             <option v-if="!hasThinkingOptions" value="">Loading...</option>
             <option v-for="option in thinkingOptions" :key="option" :value="option">

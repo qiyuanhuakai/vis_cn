@@ -201,6 +201,9 @@ type FileReadEntry = {
   toolName?: string;
   messageId?: string;
   messageKey?: string;
+  messageAgent?: string;
+  messageModel?: string;
+  messageVariant?: string;
   callId?: string;
   permissionId?: string;
   follow?: boolean;
@@ -294,6 +297,7 @@ const selectedSessionStatus = ref<'busy' | 'idle' | ''>('');
 const messageIndexById = new Map<string, number>();
 const toolIndexByCallId = new Map<string, number>();
 const userMessageIds = new Set<string>();
+const userMessageMetaById = new Map<string, UserMessageMeta>();
 const messageContentById = new Map<string, string>();
 const messagePartsById = new Map<string, Map<string, string>>();
 const messagePartOrderById = new Map<string, string[]>();
@@ -1616,6 +1620,114 @@ async function fetchPendingPermissions() {
   }
 }
 
+type UserMessageSelection = {
+  agent?: string;
+  modelId?: string;
+  variant?: string;
+};
+
+type UserMessageMeta = {
+  agent?: string;
+  providerId?: string;
+  modelId?: string;
+  variant?: string;
+};
+
+type UserMessageDisplay = {
+  agent?: string;
+  model?: string;
+  variant?: string;
+};
+
+function parseUserMessageMeta(info?: Record<string, unknown>): UserMessageMeta | null {
+  if (!info) return null;
+  const role = typeof info.role === 'string' ? info.role : '';
+  if (role !== 'user') return null;
+  const agent = typeof info.agent === 'string' ? info.agent.trim() : '';
+  const model = (info.model as Record<string, unknown> | undefined) ?? undefined;
+  const providerId = typeof model?.providerID === 'string' ? model.providerID.trim() : '';
+  const modelId = typeof model?.modelID === 'string' ? String(model.modelID).trim() : '';
+  const variant = typeof info.variant === 'string' ? info.variant.trim() : '';
+  if (!agent && !modelId && !providerId && !variant) return null;
+  return {
+    agent: agent || undefined,
+    providerId: providerId || undefined,
+    modelId: modelId || undefined,
+    variant: variant || undefined,
+  };
+}
+
+function formatUserMessageModel(meta: UserMessageMeta | null): string | undefined {
+  if (!meta) return undefined;
+  const providerId = meta.providerId?.trim() ?? '';
+  const modelId = meta.modelId?.trim() ?? '';
+  if (providerId && modelId) return `${providerId}/${modelId}`;
+  return modelId || providerId || undefined;
+}
+
+function resolveUserMessageDisplay(meta: UserMessageMeta | null): UserMessageDisplay | null {
+  if (!meta) return null;
+  const model = formatUserMessageModel(meta);
+  const hasAny = Boolean(meta.agent || model || meta.variant);
+  if (!hasAny) return null;
+  const variant = meta.variant ?? (meta.agent || model ? 'default' : undefined);
+  return {
+    agent: meta.agent,
+    model,
+    variant,
+  };
+}
+
+function storeUserMessageMeta(messageId: string | undefined, meta: UserMessageMeta | null) {
+  if (!messageId || !meta) return;
+  userMessageMetaById.set(messageId, meta);
+}
+
+function resolveUserMessageMetaForMessage(
+  messageId?: string,
+  fallbackId?: string,
+  meta?: UserMessageMeta | null,
+): UserMessageMeta | null {
+  if (meta) return meta;
+  if (messageId && userMessageMetaById.has(messageId)) {
+    return userMessageMetaById.get(messageId) ?? null;
+  }
+  if (fallbackId && userMessageMetaById.has(fallbackId)) {
+    return userMessageMetaById.get(fallbackId) ?? null;
+  }
+  return null;
+}
+
+function applyUserMessageMetaToQueue(messageId: string, meta: UserMessageMeta) {
+  const displayMeta = resolveUserMessageDisplay(meta);
+  if (!displayMeta) return;
+  queue.value.forEach((entry, index) => {
+    if (!entry.isMessage || entry.messageId !== messageId) return;
+    if (entry.role !== 'user') return;
+    queue.value.splice(index, 1, {
+      ...entry,
+      messageAgent: displayMeta.agent ?? entry.messageAgent,
+      messageModel: displayMeta.model ?? entry.messageModel,
+      messageVariant: displayMeta.variant ?? entry.messageVariant,
+    });
+  });
+}
+
+function pickLastUserSelection(messages: Array<Record<string, unknown>>): UserMessageSelection | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const entry = messages[i];
+    const info = (entry?.info as Record<string, unknown> | undefined) ?? undefined;
+    const meta = parseUserMessageMeta(info);
+    if (!meta) continue;
+    return {
+      agent: meta.agent,
+      modelId: meta.modelId,
+      variant: meta.variant,
+    };
+  }
+  return null;
+}
+
 async function fetchHistory(sessionId: string, isSubagentMessage = false) {
   if (!sessionId) return;
   try {
@@ -1629,6 +1741,18 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
     if (!response.ok) throw new Error(`History request failed (${response.status})`);
     const data = (await response.json()) as Array<Record<string, unknown>>;
     if (!Array.isArray(data)) return;
+    if (!isSubagentMessage) {
+      const selection = pickLastUserSelection(data);
+      if (selection) {
+        if (selection.agent) selectedMode.value = selection.agent;
+        if (selection.modelId) selectedModel.value = selection.modelId;
+        if (selection.variant) {
+          selectedThinking.value = selection.variant;
+        } else if (selection.agent || selection.modelId) {
+          selectedThinking.value = 'default';
+        }
+      }
+    }
     const history = data
       .map((message) => {
         const info = message.info as Record<string, unknown> | undefined;
@@ -1637,14 +1761,21 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
         if (!text.trim()) return null;
         const id = typeof info?.id === 'string' ? info.id : undefined;
         const role = typeof info?.role === 'string' ? info.role : undefined;
+        const meta = parseUserMessageMeta(info);
         if (!id) return null;
-        return { id, role, text };
+        return { id, role, text, meta };
       })
-      .filter((entry): entry is { id: string; role?: string; text: string } => Boolean(entry));
+      .filter(
+        (entry): entry is { id: string; role?: string; text: string; meta: UserMessageMeta | null } =>
+          Boolean(entry),
+      );
 
     history.slice(-HISTORY_LIMIT).forEach((entry) => {
       const messageKey = buildMessageKey(entry.id, sessionId);
       if (messageIndexById.has(messageKey)) return;
+      storeUserMessageMeta(entry.id, entry.meta);
+      const resolvedMeta = resolveUserMessageMetaForMessage(entry.id, undefined, entry.meta);
+      const displayMeta = resolveUserMessageDisplay(resolvedMeta);
       const header = '';
       const time = Date.now();
       const text = `${header}${entry.text}`;
@@ -1667,6 +1798,9 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
         header,
         content: entry.text,
         role: entry.role === 'user' ? 'user' : 'assistant',
+        messageAgent: displayMeta?.agent,
+        messageModel: displayMeta?.model,
+        messageVariant: displayMeta?.variant,
         scroll: overflowLines > 0,
         scrollDistance,
         scrollDuration,
@@ -3122,6 +3256,10 @@ function extractMessage(payload: unknown, eventType: string) {
     if (recentMatch) resolvedRole = 'user';
   }
 
+  const userMeta =
+    parseUserMessageMeta(info) ??
+    parseUserMessageMeta(messageObject as Record<string, unknown> | undefined);
+
   const messageId =
     (part?.messageID as string | undefined) ??
     (messageObject?.id as string | undefined) ??
@@ -3136,7 +3274,11 @@ function extractMessage(payload: unknown, eventType: string) {
     (properties?.sessionID as string | undefined);
   const id = (part?.id as string | undefined) ?? messageId ?? 'message:default';
 
-  return { id, messageId, content: message, role: resolvedRole, partId, partType };
+  if (userMeta) {
+    storeUserMessageMeta(messageId ?? id, userMeta);
+  }
+
+  return { id, messageId, content: message, role: resolvedRole, partId, partType, userMeta };
 }
 
 function extractStepFinish(payload: unknown, eventType: string) {
@@ -3503,9 +3645,14 @@ function registerMessageMeta(payload: unknown) {
     (info?.role as string | undefined) ??
     (properties?.role as string | undefined) ??
     (record.role as string | undefined);
+  const meta = parseUserMessageMeta(info);
 
   if (id && role === 'user') {
     userMessageIds.add(id);
+  }
+  if (id && meta) {
+    storeUserMessageMeta(id, meta);
+    applyUserMessageMetaToQueue(id, meta);
   }
 }
 
@@ -3902,6 +4049,12 @@ function connect() {
         message.role === 'user' ||
         userMessageIds.has(message.id) ||
         (message.messageId ? userMessageIds.has(message.messageId) : false);
+      const resolvedMeta = resolveUserMessageMetaForMessage(
+        message.messageId,
+        message.id,
+        message.userMeta ?? null,
+      );
+      const displayMeta = isUserMessage ? resolveUserMessageDisplay(resolvedMeta) : null;
 
       const header = '';
       const time = Date.now();
@@ -3956,6 +4109,9 @@ function connect() {
           const nextScrollDistance = Math.max(0, nextOverflowLines * lineHeight);
           const nextScrollDuration =
             nextOverflowLines > 0 ? Math.min(0.25, Math.max(0.08, nextOverflowLines * 0.01)) : 0;
+          const nextMessageAgent = displayMeta?.agent ?? existing.messageAgent;
+          const nextMessageModel = displayMeta?.model ?? existing.messageModel;
+          const nextMessageVariant = displayMeta?.variant ?? existing.messageVariant;
           queue.value.splice(existingIndex, 1, {
             ...existing,
             time,
@@ -3963,6 +4119,9 @@ function connect() {
             header,
             content: nextContent,
             role: isUserMessage ? 'user' : existing.role,
+            messageAgent: nextMessageAgent,
+            messageModel: nextMessageModel,
+            messageVariant: nextMessageVariant,
             scroll: !isFloatingMessage && nextOverflowLines > 0,
             scrollDistance: isFloatingMessage ? 0 : nextScrollDistance,
             scrollDuration: isFloatingMessage ? 0 : nextScrollDuration,
@@ -3989,6 +4148,9 @@ function connect() {
         header,
         content: mergedContent,
         role: isUserMessage ? 'user' : 'assistant',
+        messageAgent: displayMeta?.agent,
+        messageModel: displayMeta?.model,
+        messageVariant: displayMeta?.variant,
         scroll: !isFloatingMessage && overflowLines > 0,
         scrollDistance: isFloatingMessage ? 0 : scrollDistance,
         scrollDuration: isFloatingMessage ? 0 : scrollDuration,

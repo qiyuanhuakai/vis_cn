@@ -26,6 +26,12 @@
           >
             <div class="shiki-host is-message" v-html="q.html"></div>
           </div>
+          <div
+            v-if="q.role === 'user' && formatMessageMeta(q)"
+            class="message-meta"
+          >
+            {{ formatMessageMeta(q) }}
+          </div>
         </div>
         <button
           v-show="!isFollowing"
@@ -67,6 +73,9 @@ type FileReadEntry = {
   isSubagentMessage?: boolean;
   sessionId?: string;
   role?: 'user' | 'assistant';
+  messageAgent?: string;
+  messageModel?: string;
+  messageVariant?: string;
   toolStatus?: string;
   toolName?: string;
   messageId?: string;
@@ -93,6 +102,18 @@ const thinkingFrames = ['', '.', '..', '...'];
 const thinkingIndex = ref(0);
 const thinkingSuffix = ref('');
 let thinkingTimer: number | undefined;
+
+function formatMessageMeta(entry: FileReadEntry) {
+  const agent = entry.messageAgent?.trim();
+  const model = entry.messageModel?.trim();
+  const variant = entry.messageVariant?.trim();
+  const parts: string[] = [];
+  if (agent) parts.push(`[${agent}]`);
+  if (model) parts.push(model);
+  const suffix = variant ? `(${variant})` : '';
+  if (suffix) parts.push(suffix);
+  return parts.join(' ');
+}
 
 watch(
   () => props.isThinking,
@@ -183,6 +204,13 @@ defineExpose({ dockEl });
   word-break: break-word;
   --message-line-height: 1.2;
   line-height: var(--message-line-height);
+}
+
+.message-meta {
+  margin-top: 6px;
+  text-align: right;
+  font-size: 10px;
+  color: rgba(191, 219, 254, 0.9);
 }
 
 .message-dock .shiki-host {
