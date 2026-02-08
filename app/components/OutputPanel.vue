@@ -12,16 +12,98 @@
       >
         <div ref="contentEl" class="output-panel-content">
           <div
-            v-for="q in queue.filter((entry) => entry.isMessage && !entry.isSubagentMessage)"
-            :key="q.messageKey ?? q.messageId ?? q.time"
-            class="output-entry"
-            :class="{
-              'is-user': q.role === 'user',
-            }"
-            :style="getEntryStyle(q)"
+            v-for="q in filteredQueue"
+            :key="q.messageKey ?? q.roundId ?? q.messageId ?? q.time"
           >
-          <div
-            v-if="q.role === 'user' && formatMessageAgent(q)"
+            <!-- Round rendering -->
+            <div v-if="q.isRound" class="output-round">
+              <div class="round-header">
+                <div class="round-header-left">
+                  <span v-if="formatRoundMeta(q)" class="round-meta">{{ formatRoundMeta(q) }}</span>
+                </div>
+                <div class="round-header-right">
+                  <button
+                    v-if="q.roundId && q.sessionId"
+                    type="button"
+                    class="output-entry-action"
+                    @click="confirmFork(q)"
+                  >
+                    fork
+                  </button>
+                </div>
+              </div>
+              
+              <div class="round-messages">
+                <div
+                  v-for="(msg, idx) in (q.roundMessages ?? [])"
+                  :key="msg.messageId ?? idx"
+                  class="round-msg"
+                >
+                  <div
+                    class="round-msg-indicator"
+                    :class="msg.role === 'user' ? 'round-msg-indicator-user' : 'round-msg-indicator-assistant'"
+                  />
+                  <div class="round-msg-content">
+                    <MessageViewer
+                      :code="msg.content"
+                      :lang="'markdown'"
+                      :theme="theme"
+                      :wrap-mode="'soft'"
+                      :gutter-mode="'none'"
+                      :is-message="true"
+                      @rendered="handleMessageRendered"
+                    />
+                    <div v-if="msg.attachments && msg.attachments.length > 0" class="output-entry-attachments">
+                      <img
+                        v-for="item in msg.attachments"
+                        :key="item.id"
+                        class="output-entry-attachment"
+                        :src="item.url"
+                        :alt="item.filename"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="round-footer">
+                <div class="round-footer-left">
+                  <span v-if="formatRoundUsage(q)" class="output-entry-usage">{{ formatRoundUsage(q) }}</span>
+                </div>
+                <div class="round-footer-right">
+                  <button
+                    v-if="q.messageKey && hasMessageDiffs(q.messageKey)"
+                    type="button"
+                    class="output-entry-action output-entry-action-diff"
+                    @click="showRoundDiff(q)"
+                  >
+                    DIFF
+                  </button>
+                  <button
+                    v-if="q.roundId && q.sessionId"
+                    type="button"
+                    class="output-entry-action output-entry-action-danger"
+                    @click="confirmRevert(q)"
+                  >
+                    revert
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Non-round fallback (existing rendering) -->
+            <div
+              v-else
+              class="output-entry"
+              :class="{
+                'is-user': q.role === 'user',
+              }"
+              :style="getEntryStyle(q)"
+            >
+           <div
+             v-if="q.role === 'user' && formatMessageAgent(q)"
+
             class="output-entry-agent"
             :style="getAgentTextStyle(q)"
           >
@@ -90,9 +172,11 @@
                 revert
               </button>
             </div>
+           </div>
+           </div>
           </div>
-          </div>
-          <button
+           <button
+
             v-show="!isFollowing"
             type="button"
             class="follow-button"
@@ -213,6 +297,42 @@ const emit = defineEmits<{
   (event: 'revert-message', payload: { sessionId: string; messageId: string }): void;
   (event: 'show-message-diff', payload: { messageKey: string; diffs: Array<{ file: string; diff: string; before?: string; after?: string }> }): void;
 }>();
+
+const filteredQueue = computed(() => 
+  props.queue.filter((entry) => entry.isMessage && !entry.isSubagentMessage)
+);
+
+function formatRoundMeta(entry: FileReadEntry): string {
+  // Find last assistant sub-message for model info, or use root
+  const messages = entry.roundMessages ?? [];
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const model = lastAssistant?.model ?? entry.messageModel;
+  const variant = lastAssistant?.variant ?? entry.messageVariant;
+  const modelPart = variant ? `${model} (${variant})` : (model || '');
+  const timestamp = formatMessageTime(lastAssistant?.time ?? entry.messageTime);
+  return [timestamp, modelPart].filter(Boolean).join(' - ');
+}
+
+function formatRoundUsage(entry: FileReadEntry): string {
+  const messages = entry.roundMessages ?? [];
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const usage = lastAssistant?.usage ?? entry.messageUsage;
+  if (!usage) return '';
+  const tokens = usage.tokens;
+  if (!tokens) return '';
+  const input = formatCompactCount(tokens.input);
+  const output = formatCompactCount(tokens.output);
+  const reasoning = formatCompactCount(tokens.reasoning);
+  if (reasoning) return `in ${input} + out ${output} + re ${reasoning}`;
+  return `in ${input} + out ${output}`;
+}
+
+function showRoundDiff(entry: FileReadEntry) {
+  if (!entry.messageKey) return;
+  const diffs = props.messageDiffs?.get(entry.messageKey);
+  if (!diffs || diffs.length === 0) return;
+  emit('show-message-diff', { messageKey: entry.messageKey, diffs });
+}
 
 const panelEl = ref<HTMLDivElement | null>(null);
 const contentEl = ref<HTMLDivElement | null>(null);
@@ -753,5 +873,92 @@ defineExpose({ panelEl });
 
 .shiki-host.is-message :deep(.line)::before {
   content: '';
+}
+
+.output-round {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  background: var(--bg-secondary, #1a1a1a);
+}
+
+.round-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.round-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.round-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.round-meta {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.round-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.round-msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.round-msg-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.round-msg-indicator-user {
+  background-color: #4a9eff; /* blue for user */
+}
+
+.round-msg-indicator-assistant {
+  background-color: #4ade80; /* green for assistant */
+}
+
+.round-msg-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.round-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.round-footer-left {
+  display: flex;
+  align-items: center;
+}
+
+.round-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>
