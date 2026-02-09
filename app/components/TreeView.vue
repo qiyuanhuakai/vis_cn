@@ -35,7 +35,8 @@
           'is-file': row.node.type !== 'directory',
           'is-selected': selectedPath === row.node.path,
           'is-ignored': row.node.ignored,
-          'is-synthetic': row.node.synthetic,
+          'is-deleted': row.node.type !== 'directory' && statusFor(row.node.path) === 'deleted',
+          'has-status': Boolean(statusFor(row.node.path)),
         }"
         :style="{ '--indent': String(row.depth) }"
         @click="onRowClick(row)"
@@ -54,7 +55,7 @@
         <span class="tree-icon">{{ row.node.type === 'directory' ? '📁' : '📄' }}</span>
         <span class="tree-name">{{ row.node.name }}</span>
         <button
-          v-if="statusFor(row.node.path)"
+          v-if="statusFor(row.node.path) && row.node.type !== 'directory'"
           type="button"
           class="tree-status tree-status-button"
           :class="`is-${statusFor(row.node.path)}`"
@@ -128,16 +129,16 @@ function normalizePath(value: string) {
   return trimmed.replace(/^\.\//, '').replace(/^(\.\.\/)+/, '').replace(/^\//, '').replace(/\/$/, '');
 }
 
-function withDeletedPseudoNodes(nodes: TreeNode[], statusByPath: Record<string, TreeStatus>): TreeNode[] {
+function withPseudoNodes(nodes: TreeNode[], statusByPath: Record<string, TreeStatus>): TreeNode[] {
   const result = cloneNodes(nodes);
-  const deletedPaths = Object.entries(statusByPath)
-    .filter(([, status]) => status === 'deleted')
+  const missingPaths = Object.entries(statusByPath)
+    .filter(([, status]) => status === 'deleted' || status === 'added')
     .map(([path]) => normalizePath(path))
     .filter((path) => path.length > 0)
     .sort((a, b) => a.split('/').length - b.split('/').length);
 
-  deletedPaths.forEach((deletedPath) => {
-    const segments = deletedPath.split('/').filter(Boolean);
+  missingPaths.forEach((targetPath) => {
+    const segments = targetPath.split('/').filter(Boolean);
     if (!segments.length) return;
     let cursor = result;
     let currentPath = '';
@@ -186,7 +187,7 @@ function filterChanges(nodes: TreeNode[], statusByPath: Record<string, TreeStatu
     .filter((node): node is TreeNode => Boolean(node));
 }
 
-const normalizedNodes = computed(() => withDeletedPseudoNodes(props.rootNodes, props.statusByPath ?? {}));
+const normalizedNodes = computed(() => withPseudoNodes(props.rootNodes, props.statusByPath ?? {}));
 
 const displayNodes = computed(() => {
   if (viewMode.value === 'all') return normalizedNodes.value;
@@ -325,8 +326,12 @@ function onRowDoubleClick(row: { node: TreeNode }) {
   opacity: 0.8;
 }
 
-.tree-row.is-synthetic .tree-name {
-  font-style: italic;
+.tree-row.is-deleted .tree-name {
+  text-decoration: line-through;
+}
+
+.tree-row.has-status .tree-name {
+  font-weight: 600;
 }
 
 .tree-toggle {
