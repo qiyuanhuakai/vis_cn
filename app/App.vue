@@ -7065,7 +7065,6 @@ function openSessionDiff(path: string) {
     bringToFront(existing);
     return;
   }
-  const diffText = formatDiffEntries([entry]);
   const metrics = getCanvasMetrics();
   const x = metrics ? clamp(metrics.canvasRect.width * 0.16, 16, Math.max(16, metrics.canvasRect.width - FILE_VIEWER_WINDOW_WIDTH - 16)) : 24;
   const y = metrics ? clamp(metrics.toolAreaHeight * 0.1, 16, Math.max(16, metrics.toolAreaHeight - FILE_VIEWER_WINDOW_HEIGHT - 16)) : 24;
@@ -7076,7 +7075,7 @@ function openSessionDiff(path: string) {
     y,
     header: '',
     path,
-    content: diffText,
+    content: '',
     scroll: false,
     scrollDistance: 0,
     scrollDuration: 0,
