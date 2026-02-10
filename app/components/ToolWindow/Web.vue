@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import CodeContent from '../CodeContent.vue';
+import { useCodeRender } from '../../utils/useCodeRender';
 
 const props = defineProps<{
   input?: Record<string, unknown>;
@@ -10,27 +11,8 @@ const props = defineProps<{
   toolName?: string;
 }>();
 
-// Format webfetch title: url
-function formatWebfetchToolTitle(input: Record<string, unknown> | undefined) {
-  const url = typeof input?.url === 'string' ? input.url.trim() : '';
-  return url || undefined;
-}
-
-// Format query title: query
-function formatQueryToolTitle(input: Record<string, unknown> | undefined) {
-  const query = typeof input?.query === 'string' ? input.query.trim() : '';
-  return query || undefined;
-}
-
 const displayContent = computed(() => {
   return props.output ?? '';
-});
-
-const title = computed(() => {
-  if (props.toolName === 'webfetch') {
-    return formatWebfetchToolTitle(props.input) || 'Web Fetch';
-  }
-  return formatQueryToolTitle(props.input) || 'Search';
 });
 
 const lang = computed(() => {
@@ -42,8 +24,15 @@ const lang = computed(() => {
   }
   return 'markdown';
 });
+
+const { html: renderedHtml } = useCodeRender(() => ({
+  code: displayContent.value,
+  lang: lang.value,
+  theme: 'github-dark',
+  gutterMode: 'none' as const,
+}));
 </script>
 
 <template>
-  <CodeContent :html="displayContent" variant="code" gutter-mode="none" />
+  <CodeContent :html="renderedHtml" variant="code" gutter-mode="none" />
 </template>

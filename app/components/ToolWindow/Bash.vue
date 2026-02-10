@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import CodeContent from '../CodeContent.vue';
+import { useCodeRender } from '../../utils/useCodeRender';
 
 const props = defineProps<{
   input?: Record<string, unknown>;
@@ -10,7 +11,6 @@ const props = defineProps<{
   state?: Record<string, unknown>;
 }>();
 
-// Format bash content: $ command\n\noutput
 function formatBashToolContent(
   input: Record<string, unknown> | undefined,
   output: string,
@@ -29,30 +29,18 @@ function formatBashToolContent(
   return lines.join('\n');
 }
 
-// Format title: description → state.title → command first line
-function formatBashToolTitle(
-  input: Record<string, unknown> | undefined,
-  state: Record<string, unknown> | undefined,
-) {
-  const description = typeof input?.description === 'string' ? input.description.trim() : '';
-  if (description) return description;
-  const stateTitle = typeof state?.title === 'string' ? state.title.trim() : '';
-  if (stateTitle) return stateTitle;
-  const command = typeof input?.command === 'string' ? input.command.trim() : '';
-  if (!command) return undefined;
-  const firstLine = command.split('\n')[0]?.trim() ?? '';
-  return firstLine.length > 96 ? `${firstLine.slice(0, 93)}...` : firstLine;
-}
-
 const displayContent = computed(() => {
   return formatBashToolContent(props.input, props.output ?? props.error ?? '', props.status);
 });
 
-const title = computed(() => {
-  return formatBashToolTitle(props.input, props.state) || 'Bash';
-});
+const { html: renderedHtml } = useCodeRender(() => ({
+  code: displayContent.value,
+  lang: 'shellscript',
+  theme: 'github-dark',
+  gutterMode: 'none' as const,
+}));
 </script>
 
 <template>
-  <CodeContent :html="displayContent" variant="code" wrap-mode="soft" gutter-mode="none" />
+  <CodeContent :html="renderedHtml" variant="code" wrap-mode="soft" gutter-mode="none" />
 </template>

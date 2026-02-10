@@ -1,4 +1,4 @@
-import { ref, computed, onUnmounted, type Component, type Ref } from 'vue';
+import { reactive, computed, markRaw, onUnmounted, type Component, type Ref } from 'vue';
 import { renderWorkerHtml, type RenderRequest } from '../utils/workerRenderer';
 
 export interface FloatingWindowEntry {
@@ -29,6 +29,9 @@ export interface FloatingWindowEntry {
   onResize?: (width: number, height: number) => void;
 }
 
+const TOOL_RUNNING_TTL_MS = 1000 * 60 * 10;
+const TOOL_COMPLETED_TTL_MS = 2000;
+
 const DEFAULT_OPTS: Partial<FloatingWindowEntry> = {
   closable: false,
   resizable: false,
@@ -54,9 +57,37 @@ function getRandomPosition(): { x: number; y: number } {
   };
 }
 
+/**
+ * Prevent Vue's reactive() from deeply proxying non-serializable values.
+ * Proxied components break <component :is>, and proxied functions are wasteful.
+ */
+function sanitizeEntry(entry: FloatingWindowEntry): FloatingWindowEntry {
+  if (entry.component) entry.component = markRaw(entry.component);
+  if (entry.beforeOpen) entry.beforeOpen = markRaw(entry.beforeOpen);
+  if (entry.afterOpen) entry.afterOpen = markRaw(entry.afterOpen);
+  if (entry.beforeClose) entry.beforeClose = markRaw(entry.beforeClose);
+  if (entry.afterClose) entry.afterClose = markRaw(entry.afterClose);
+  if (entry.onResize) entry.onResize = markRaw(entry.onResize);
+  return entry;
+}
+
+function resolveExpiresAt(
+  opts: Partial<FloatingWindowEntry>,
+  existing?: FloatingWindowEntry,
+): number {
+  // Explicit expiresAt always wins
+  if (typeof opts.expiresAt === 'number') return opts.expiresAt;
+  // Status-based: completed/error always gets short TTL (even if existing had longer)
+  const status = opts.status;
+  if (status === 'completed' || status === 'error') return Date.now() + TOOL_COMPLETED_TTL_MS;
+  // For non-terminal status, keep existing expiry if set
+  if (existing && typeof existing.expiresAt === 'number') return existing.expiresAt;
+  return Date.now() + TOOL_RUNNING_TTL_MS;
+}
+
 export function useFloatingWindows() {
-  const entriesMap = new Map<string, FloatingWindowEntry>();
-  const entries = computed(() => [...entriesMap.values()].filter(e => e.isReady));
+  const entriesMap = reactive(new Map<string, FloatingWindowEntry>());
+  const entries = computed(() => [...entriesMap.values()].filter((e) => e.isReady));
 
   // GC timer
   const gcInterval = setInterval(() => {
@@ -74,7 +105,7 @@ export function useFloatingWindows() {
 
   async function open(key: string, opts: Partial<FloatingWindowEntry>): Promise<void> {
     const existing = entriesMap.get(key);
-    
+
     // Merge with defaults and existing
     const merged: FloatingWindowEntry = {
       ...DEFAULT_OPTS,
@@ -82,7 +113,8 @@ export function useFloatingWindows() {
       ...opts,
       key,
       time: Date.now(),
-      zIndex: opts.zIndex ?? nextZIndex(),
+      zIndex: existing ? existing.zIndex : nextZIndex(),
+      expiresAt: resolveExpiresAt(opts, existing),
     } as FloatingWindowEntry;
 
     // Set initial position if new
@@ -99,7 +131,6 @@ export function useFloatingWindows() {
 
     // Content resolution
     if (typeof merged.content === 'function') {
-      // Async content function
       try {
         merged.resolvedHtml = await (merged.content as () => Promise<string>)();
         merged.isReady = true;
@@ -108,12 +139,11 @@ export function useFloatingWindows() {
         merged.isReady = true;
       }
     } else if (merged.content && merged.lang) {
-      // String content with lang - render via worker
       try {
         merged.resolvedHtml = await renderWorkerHtml({
           code: merged.content,
           lang: merged.lang,
-          theme: 'dark', // TODO: get from app state
+          theme: 'github-dark',
         });
         merged.isReady = true;
       } catch (e) {
@@ -121,20 +151,18 @@ export function useFloatingWindows() {
         merged.isReady = true;
       }
     } else if (merged.content) {
-      // Raw HTML content
       merged.resolvedHtml = merged.content;
       merged.isReady = true;
     } else {
-      // No content - component handles display
+      // No content — component handles display
       merged.resolvedHtml = '';
       merged.isReady = true;
     }
 
-    entriesMap.set(key, merged);
+    entriesMap.set(key, sanitizeEntry(merged));
 
     // Execute afterOpen hook
     if (merged.afterOpen) {
-      // Defer to next tick to ensure DOM is ready
       setTimeout(() => {
         const el = document.querySelector(`[data-floating-key="${key}"]`);
         if (el) merged.afterOpen!(el as HTMLElement);
@@ -146,11 +174,20 @@ export function useFloatingWindows() {
     const existing = entriesMap.get(key);
     if (!existing) return;
 
-    entriesMap.set(key, {
+    const merged = {
       ...existing,
       ...partialOpts,
       key,
-    });
+    } as FloatingWindowEntry;
+
+    // Status-based expiry
+    if (partialOpts.status && !partialOpts.expiresAt) {
+      if (partialOpts.status === 'completed' || partialOpts.status === 'error') {
+        merged.expiresAt = Date.now() + TOOL_COMPLETED_TTL_MS;
+      }
+    }
+
+    entriesMap.set(key, sanitizeEntry(merged));
   }
 
   async function setContent(key: string, text: string, lang?: string): Promise<void> {
@@ -164,7 +201,7 @@ export function useFloatingWindows() {
       entry.resolvedHtml = await renderWorkerHtml({
         code: text,
         lang,
-        theme: 'dark',
+        theme: 'github-dark',
       });
     } else {
       entry.resolvedHtml = text;
@@ -182,7 +219,7 @@ export function useFloatingWindows() {
       entry.resolvedHtml = await renderWorkerHtml({
         code: newContent,
         lang: lang || entry.lang!,
-        theme: 'dark',
+        theme: 'github-dark',
       });
     } else {
       entry.resolvedHtml = newContent;
@@ -198,9 +235,8 @@ export function useFloatingWindows() {
     const entry = entriesMap.get(key);
     if (entry) {
       entry.status = status;
-      // Status-only optimization: if content hasn't changed, just update status
       if (status === 'completed' || status === 'error') {
-        entry.expiresAt = Date.now() + 30000; // 30s TTL for completed/error
+        entry.expiresAt = Date.now() + TOOL_COMPLETED_TTL_MS;
       }
     }
   }
@@ -236,7 +272,7 @@ export function useFloatingWindows() {
   }
 
   function closeAll(): void {
-    for (const key of entriesMap.keys()) {
+    for (const key of [...entriesMap.keys()]) {
       close(key);
     }
   }

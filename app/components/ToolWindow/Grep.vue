@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import CodeContent from '../CodeContent.vue';
+import { useCodeRender } from '../../utils/useCodeRender';
 
 const props = defineProps<{
   input?: Record<string, unknown>;
@@ -9,7 +10,6 @@ const props = defineProps<{
   status?: string;
 }>();
 
-// Parse grep output with source lines: "Line N: text" pattern
 function parseGrepOutputWithSourceLines(output: string) {
   const lines = output.split('\n');
   const contentLines: string[] = [];
@@ -35,19 +35,6 @@ function parseGrepOutputWithSourceLines(output: string) {
   };
 }
 
-// Format title: pattern + path + include
-function formatGlobToolTitle(input: Record<string, unknown> | undefined) {
-  const pattern = typeof input?.pattern === 'string' ? input.pattern.trim() : '';
-  const path = typeof input?.path === 'string' ? input.path.trim() : '';
-  const include = typeof input?.include === 'string' ? input.include.trim() : '';
-  const segments: string[] = [];
-  if (pattern) segments.push(pattern);
-  if (path) segments.push(`@ ${path}`);
-  if (include) segments.push(`include ${include}`);
-  const title = segments.join(' ');
-  return title || undefined;
-}
-
 const parsed = computed(() => {
   if (!props.output) return null;
   return parseGrepOutputWithSourceLines(props.output);
@@ -61,20 +48,20 @@ const gutterLines = computed(() => {
   return parsed.value?.gutterLines;
 });
 
-const hasSourceLines = computed(() => {
-  return parsed.value !== null;
+const grepPattern = computed(() => {
+  return typeof props.input?.pattern === 'string' ? props.input.pattern : undefined;
 });
 
-const title = computed(() => {
-  return formatGlobToolTitle(props.input) || 'Grep';
-});
+const { html: renderedHtml } = useCodeRender(() => ({
+  code: displayContent.value,
+  lang: 'text',
+  theme: 'github-dark',
+  gutterMode: 'single' as const,
+  gutterLines: gutterLines.value,
+  grepPattern: grepPattern.value,
+}));
 </script>
 
 <template>
-  <CodeContent 
-    :html="displayContent" 
-    variant="code" 
-    gutter-mode="single"
-    :gutter-lines="gutterLines"
-  />
+  <CodeContent :html="renderedHtml" variant="code" gutter-mode="single" />
 </template>

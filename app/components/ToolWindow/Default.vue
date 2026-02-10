@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import CodeContent from '../CodeContent.vue';
+import { useCodeRender } from '../../utils/useCodeRender';
+import { guessLanguageFromPath } from './utils';
 
 const props = defineProps<{
   input?: Record<string, unknown>;
@@ -12,54 +14,27 @@ const props = defineProps<{
   toolName?: string;
 }>();
 
-// Format list title: path
-function formatListToolTitle(input: Record<string, unknown> | undefined) {
-  const path = typeof input?.path === 'string' ? input.path.trim() : '';
-  return path || undefined;
-}
-
-// Format read-like title: filePath → path
-function formatReadLikeToolTitle(input: Record<string, unknown> | undefined) {
-  const filePath = typeof input?.filePath === 'string' ? input.filePath.trim() : '';
-  if (filePath) return filePath;
-  const path = typeof input?.path === 'string' ? input.path.trim() : '';
-  return path || undefined;
-}
-
 const displayContent = computed(() => {
   return props.output ?? '';
 });
 
-const title = computed(() => {
-  switch (props.toolName) {
-    case 'list':
-      return formatListToolTitle(props.input) || 'List';
-    case 'write':
-      return formatReadLikeToolTitle(props.input) || 'Write';
-    case 'batch':
-      return 'Batch execution';
-    case 'plan_enter':
-    case 'plan_exit':
-      return (typeof props.state?.title === 'string' ? props.state.title : '') || props.toolName;
-    default:
-      return props.toolName || 'Tool';
+const lang = computed(() => {
+  if (props.toolName === 'write') {
+    const path = typeof props.input?.filePath === 'string' ? props.input.filePath
+      : typeof props.input?.path === 'string' ? props.input.path : undefined;
+    return guessLanguageFromPath(path);
   }
+  return 'text';
 });
 
-const lang = computed(() => {
-  switch (props.toolName) {
-    case 'write':
-      return 'text'; // Could guess from path
-    case 'batch':
-    case 'plan_enter':
-    case 'plan_exit':
-      return 'text';
-    default:
-      return 'text';
-  }
-});
+const { html: renderedHtml } = useCodeRender(() => ({
+  code: displayContent.value,
+  lang: lang.value,
+  theme: 'github-dark',
+  gutterMode: 'none' as const,
+}));
 </script>
 
 <template>
-  <CodeContent :html="displayContent" variant="code" gutter-mode="none" />
+  <CodeContent :html="renderedHtml" variant="code" gutter-mode="none" />
 </template>
