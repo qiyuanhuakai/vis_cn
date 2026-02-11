@@ -121,7 +121,7 @@
                       <div class="model-dropdown-item">
                         <span class="model-dropdown-name">{{ model.displayName }}</span>
                         <span class="model-dropdown-path"
-                          >{{ model.providerID }}/{{ model.id }}</span
+                          >{{ model.providerID }}/{{ model.modelID }}</span
                         >
                       </div>
                     </DropdownItem>
@@ -190,6 +190,7 @@ import Dropdown from './Dropdown.vue';
 import DropdownItem from './Dropdown/Item.vue';
 type ModelOption = {
   id: string;
+  modelID: string;
   label: string;
   displayName: string;
   providerID?: string;
@@ -509,7 +510,7 @@ const selectedModelDisplayName = computed(() => selectedModelOption.value?.displ
 const selectedModelPath = computed(() => {
   const opt = selectedModelOption.value;
   if (!opt) return '';
-  return `${opt.providerID ?? ''}/${opt.id}`;
+  return `${opt.providerID ?? ''}/${opt.modelID}`;
 });
 
 const thinkingChoices = computed<ThinkingChoice[]>(() =>

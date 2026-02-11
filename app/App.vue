@@ -626,6 +626,7 @@ const commands = ref<CommandInfo[]>([]);
 const modelOptions = ref<
   Array<{
     id: string;
+    modelID: string;
     label: string;
     displayName: string;
     providerID?: string;
@@ -920,6 +921,25 @@ function buildThinkingOptions(variants?: Record<string, unknown>) {
   return [undefined, ...keys] as Array<string | undefined>;
 }
 
+function buildProviderModelKey(providerID?: string, modelID?: string) {
+  const normalizedProvider = providerID?.trim() ?? '';
+  const normalizedModel = modelID?.trim() ?? '';
+  if (!normalizedProvider || !normalizedModel) return '';
+  return `${normalizedProvider}/${normalizedModel}`;
+}
+
+function parseProviderModelKey(value: string) {
+  const normalized = value.trim();
+  const slashIndex = normalized.indexOf('/');
+  if (slashIndex <= 0 || slashIndex >= normalized.length - 1) {
+    return { providerID: '', modelID: '' };
+  }
+  const providerID = normalized.slice(0, slashIndex).trim();
+  const modelID = normalized.slice(slashIndex + 1).trim();
+  if (!providerID || !modelID) return { providerID: '', modelID: '' };
+  return { providerID, modelID };
+}
+
 type QuerySelection = {
   projectId: string;
   sessionId: string;
@@ -1181,7 +1201,7 @@ function applyAgentDefaults(agentName: string) {
   const defaultModel = agent?.model;
   if (defaultModel?.providerID && defaultModel?.modelID) {
     const match = modelOptions.value.find(
-      (m) => m.id === defaultModel.modelID && m.providerID === defaultModel.providerID,
+      (m) => m.modelID === defaultModel.modelID && m.providerID === defaultModel.providerID,
     );
     if (match) {
       selectedModel.value = match.id;
@@ -2719,6 +2739,7 @@ async function fetchProviders() {
     providers.value = Array.isArray(data.providers) ? data.providers : [];
     const models: Array<{
       id: string;
+      modelID: string;
       label: string;
       displayName: string;
       providerID?: string;
@@ -2732,8 +2753,11 @@ async function fetchProviders() {
         const providerLabel = provider.name?.trim() || providerID;
         const modelDisplayName = model.name?.trim() || model.id;
         const label = `${modelDisplayName} [${providerID}/${model.id}]`;
+        const id = buildProviderModelKey(providerID, model.id);
+        if (!id) return;
         models.push({
-          id: model.id,
+          id,
+          modelID: model.id,
           label,
           displayName: modelDisplayName,
           providerID,
@@ -2760,7 +2784,9 @@ async function fetchProviders() {
 
     if (!selectedModel.value) {
       const defaults = data.default ?? {};
-      const preferredModelId = Object.values(defaults)[0];
+      const preferredModelId = Object.entries(defaults)
+        .map(([providerID, modelID]) => buildProviderModelKey(providerID, modelID))
+        .find((value) => Boolean(value));
       const firstModel = modelOptions.value[0]?.id;
       selectedModel.value = preferredModelId || firstModel || '';
     }
@@ -5313,6 +5339,9 @@ async function sendMessage() {
   const slash = hasText ? parseSlashCommand(text) : null;
   const commandMatch = slash ? findCommandByName(slash.name) : null;
   const selectedInfo = modelOptions.value.find((model) => model.id === selectedModel.value);
+  const selectedModelIDs = parseProviderModelKey(selectedModel.value);
+  const providerID = selectedInfo?.providerID ?? (selectedModelIDs.providerID || undefined);
+  const modelID = selectedInfo?.modelID ?? (selectedModelIDs.modelID || undefined);
   if (hasText) {
     recentUserInputs.push({ text, time: Date.now() });
     while (recentUserInputs.length > 20) recentUserInputs.shift();
@@ -5358,8 +5387,8 @@ async function sendMessage() {
       directory,
       agent: selectedMode.value,
       model: {
-        providerID: selectedInfo?.providerID,
-        modelID: selectedModel.value,
+        providerID,
+        modelID: modelID || '',
       },
       variant: selectedThinking.value,
       parts,
