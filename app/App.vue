@@ -5686,15 +5686,17 @@ function formatSessionGraphDump(): string {
     lines.push('');
   }
 
-  // Directory -> project mapping
-  const dirEntries = Object.entries(data.projectIDByDirectory);
-  if (dirEntries.length > 0) {
-    lines.push('DIRECTORY -> PROJECT MAPPING');
-    for (const [dir, projectID] of dirEntries) {
-      lines.push(`  ${dir} -> ${projectID}`);
-    }
-    lines.push('');
-  }
+   // Directory ↔ Project (1:1 mapping)
+   const dirs = Object.keys(data.projectIDByDirectory).sort();
+   if (dirs.length > 0) {
+     lines.push('DIRECTORY ↔ PROJECT (1:1)');
+     lines.push('');
+     for (const dir of dirs) {
+       const projectID = data.projectIDByDirectory[dir];
+       lines.push(`  ${dir} → ${projectID}`);
+     }
+     lines.push('');
+   }
 
   return lines.join('\n');
 }
