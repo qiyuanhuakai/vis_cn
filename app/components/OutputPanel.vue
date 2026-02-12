@@ -138,7 +138,7 @@
               v-else
               v-show="isEntryRendered(q)"
               class="output-entry"
-              :class="{ 'is-user': q.role === 'user' }"
+              :class="{ 'is-user': q.role === 'user', 'is-question-answer': q.isQuestionAnswer }"
               :style="getEntryStyle(q)"
             >
               <div
@@ -301,6 +301,7 @@ type FileReadEntry = {
   roundMessages?: RoundMessage[];
   roundDiffs?: Array<{ file: string; diff: string; before?: string; after?: string }>;
   messageError?: { name: string; message: string } | null;
+  isQuestionAnswer?: boolean;
 };
 
 type RoundMessage = {
@@ -910,6 +911,11 @@ defineExpose({ panelEl });
   border-color: rgba(148, 163, 184, 0.55);
   padding-top: 18px;
   padding-bottom: 10px;
+}
+
+.output-entry.is-question-answer {
+  border-color: rgba(34, 197, 94, 0.7);
+  background: rgba(6, 32, 18, 0.5);
 }
 
 .output-entry-inner {
