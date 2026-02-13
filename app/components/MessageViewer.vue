@@ -191,7 +191,6 @@ onBeforeUnmount(() => {
 .message-content :deep(.markdown-host ul),
 .message-content :deep(.markdown-host ol) {
   padding: 0.5em;
-  padding-left: 1.35em;
   margin: 0;
 }
 
@@ -226,6 +225,10 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   color: #60a5fa;
+}
+
+.message-content :deep(.markdown-host li + li) {
+  margin-top: 0.5em;
 }
 
 
