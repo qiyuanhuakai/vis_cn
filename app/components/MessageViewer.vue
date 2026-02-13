@@ -247,11 +247,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   font-size: 0.95em;
-  color: #e88585;
-  background: rgba(148, 163, 184, 0.12);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 4px;
-  padding: 0.05em 0.32em;
+  color: #79B8FF;
 }
 
 .message-content :deep(.markdown-host pre:not(.shiki)) {
