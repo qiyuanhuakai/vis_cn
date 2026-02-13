@@ -7,7 +7,10 @@ const MAX_FRAME_DT_MS = 50;
 const NATIVE_SMOOTH_TIMEOUT_MS = 1_500;
 type SmoothEngine = 'raf' | 'native';
 type ScrollFollowOptions = { bottomThresholdPx?: number; observeDelayMs?: number; smoothEngine?: SmoothEngine; smoothOnMutation?: boolean; smoothOnInitialFollow?: boolean; enabled?: boolean };
+const FOLLOW_DEBUG = (typeof window !== 'undefined' && (window as any).__VIS_FOLLOW_DEBUG__) || false;
+
 function followDebug(event: string, detail?: Record<string, unknown>) {
+  if (!FOLLOW_DEBUG) return;
   const t = typeof performance !== 'undefined' ? Number(performance.now().toFixed(1)) : 0;
   if (detail) return void console.debug(`[follow] ${event}`, { t, ...detail });
   console.debug(`[follow] ${event}`, { t });

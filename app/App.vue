@@ -477,11 +477,6 @@ const outputPanelInitialFollowPending = ref(true);
 pauseOutputPanelTracking();
 
 function scheduleFollowScroll(reason = 'unspecified') {
-  followDebug('scheduleFollowScroll:request', {
-    reason,
-    trackingPaused: isOutputPanelTrackingPaused.value,
-    isFollowing: isFollowing.value,
-  });
   notifyContentChange();
 }
 
@@ -497,20 +492,11 @@ function handleOutputPanelInitialRenderComplete() {
 }
 
 function handleOutputPanelResumeFollow() {
-  followDebug('resume-follow-click');
   resumeFollow();
 }
 
 function handleOutputPanelMessageRendered() {
-  const panel = outputPanelContainerEl.value;
-  followDebug('message-rendered-event', {
-    queueLength: queue.value.length,
-    isFollowing: isFollowing.value,
-    trackingPaused: isOutputPanelTrackingPaused.value,
-    scrollTop: panel?.scrollTop,
-    scrollHeight: panel?.scrollHeight,
-    clientHeight: panel?.clientHeight,
-  });
+  // Debug logging moved to useScrollFollow composable
 }
 
 const runningToolIds = reactive(new Set<string>());
@@ -5915,9 +5901,6 @@ async function reloadSelectedSessionState() {
     return;
   }
   outputPanelInitialFollowPending.value = true;
-  followDebug('reloadSelectedSessionState:pause-tracking', {
-    selectedSessionId: selectedSessionId.value,
-  });
   pauseOutputPanelTracking();
   const selected = sessions.value.find((session) => session.id === selectedSessionId.value);
   if (selected?.projectID) {
@@ -6075,15 +6058,6 @@ watch(
 );
 
 function log(..._args: unknown[]) {}
-
-function followDebug(event: string, detail?: Record<string, unknown>) {
-  const t = typeof performance !== 'undefined' ? Number(performance.now().toFixed(1)) : 0;
-  if (detail) {
-    console.debug(`[app-follow] ${event}`, { t, ...detail });
-    return;
-  }
-  console.debug(`[app-follow] ${event}`, { t });
-}
 
 const shikiTheme = ref('github-dark');
 
