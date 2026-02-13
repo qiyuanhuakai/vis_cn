@@ -178,20 +178,31 @@ onBeforeUnmount(() => {
 
 .message-content :deep(.markdown-host ul),
 .message-content :deep(.markdown-host ol) {
-  margin: 0.4em 0;
   padding-left: 1.6em;
 }
 
 .message-content :deep(.markdown-host li) {
-  margin: 0.15em 0;
+  display: block;
+  margin: 0.25em 0;
 }
 
-.message-content :deep(.markdown-host li > p) {
-  margin: 0.2em 0;
+.message-content :deep(.markdown-host ul > li)::before {
+  content: '- ';
+}
+
+.message-content :deep(.markdown-host ol) {
+  counter-reset: md-ol;
+}
+
+.message-content :deep(.markdown-host ol > li) {
+  counter-increment: md-ol;
+}
+
+.message-content :deep(.markdown-host ol > li)::before {
+  content: counter(md-ol) '. ';
 }
 
 .message-content :deep(.markdown-host blockquote) {
-  margin: 0.5em 0;
   padding: 0.2em 0.8em;
   border-left: 3px solid #64748b;
   color: #94a3b8;
