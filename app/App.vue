@@ -462,9 +462,9 @@ const {
   isFollowing,
   pauseTracking: pauseOutputPanelTracking,
   resumeTracking: resumeOutputPanelTracking,
+  runWithoutTracking: runWithoutOutputPanelTracking,
   resumeFollow,
   scrollToBottom: scrollOutputPanelToBottom,
-  notifyContentChange,
 } = useScrollFollow(outputPanelContainerEl, outputPanelScrollMode, {
   bottomThresholdPx: FOLLOW_THRESHOLD_PX,
   observeDelayMs: 0,
@@ -477,26 +477,86 @@ const outputPanelInitialFollowPending = ref(true);
 pauseOutputPanelTracking();
 
 function scheduleFollowScroll(reason = 'unspecified') {
-  notifyContentChange();
+  const panel = outputPanelContainerEl.value;
+  followDebug('scheduleFollowScroll:request', {
+    reason,
+    trackingPaused: isOutputPanelTrackingPaused.value,
+    isFollowing: isFollowing.value,
+    queueLength: queue.value.length,
+    scrollTop: panel?.scrollTop,
+    scrollHeight: panel?.scrollHeight,
+    clientHeight: panel?.clientHeight,
+  });
+  if (isOutputPanelTrackingPaused.value) {
+    followDebug('scheduleFollowScroll:skip-paused', { reason });
+    return;
+  }
+  if (!isFollowing.value) {
+    followDebug('scheduleFollowScroll:skip-not-following', { reason });
+    return;
+  }
+  nextTick(() => {
+    if (isOutputPanelTrackingPaused.value) {
+      followDebug('scheduleFollowScroll:nextTick-skip-paused', { reason });
+      return;
+    }
+    if (!isFollowing.value) {
+      followDebug('scheduleFollowScroll:nextTick-skip-not-following', { reason });
+      return;
+    }
+    followDebug('scheduleFollowScroll:nextTick-scroll', { reason });
+    scrollOutputPanelToBottom(false);
+  });
 }
 
 function handleOutputPanelInitialRenderComplete() {
+  followDebug('initialRenderComplete:start', {
+    pending: outputPanelInitialFollowPending.value,
+  });
   if (!outputPanelInitialFollowPending.value) return;
   outputPanelInitialFollowPending.value = false;
-  resumeFollow(false);
+  runWithoutOutputPanelTracking(() => {
+    followDebug('initialRenderComplete:resumeFollow');
+    resumeFollow(false);
+  });
   nextTick(() => {
-    scrollOutputPanelToBottom(false);
-    resumeOutputPanelTracking({ syncToBottom: true });
-    syncFloatingExtent();
+    runWithoutOutputPanelTracking(() => {
+      followDebug('initialRenderComplete:scroll-1');
+      scrollOutputPanelToBottom(false);
+    });
+    requestAnimationFrame(() => {
+      runWithoutOutputPanelTracking(() => {
+        followDebug('initialRenderComplete:scroll-2');
+        scrollOutputPanelToBottom(false);
+      });
+      requestAnimationFrame(() => {
+        runWithoutOutputPanelTracking(() => {
+          followDebug('initialRenderComplete:scroll-3');
+          scrollOutputPanelToBottom(false);
+        });
+        followDebug('initialRenderComplete:resumeTracking');
+        resumeOutputPanelTracking({ syncToBottom: true });
+        syncFloatingExtent();
+      });
+    });
   });
 }
 
 function handleOutputPanelResumeFollow() {
+  followDebug('resume-follow-click');
   resumeFollow();
 }
 
 function handleOutputPanelMessageRendered() {
-  // Debug logging moved to useScrollFollow composable
+  const panel = outputPanelContainerEl.value;
+  followDebug('message-rendered-event', {
+    queueLength: queue.value.length,
+    isFollowing: isFollowing.value,
+    trackingPaused: isOutputPanelTrackingPaused.value,
+    scrollTop: panel?.scrollTop,
+    scrollHeight: panel?.scrollHeight,
+    clientHeight: panel?.clientHeight,
+  });
 }
 
 const runningToolIds = reactive(new Set<string>());
@@ -5901,6 +5961,9 @@ async function reloadSelectedSessionState() {
     return;
   }
   outputPanelInitialFollowPending.value = true;
+  followDebug('reloadSelectedSessionState:pause-tracking', {
+    selectedSessionId: selectedSessionId.value,
+  });
   pauseOutputPanelTracking();
   const selected = sessions.value.find((session) => session.id === selectedSessionId.value);
   if (selected?.projectID) {
@@ -6058,6 +6121,15 @@ watch(
 );
 
 function log(..._args: unknown[]) {}
+
+function followDebug(event: string, detail?: Record<string, unknown>) {
+  const t = typeof performance !== 'undefined' ? Number(performance.now().toFixed(1)) : 0;
+  if (detail) {
+    console.debug(`[app-follow] ${event}`, { t, ...detail });
+    return;
+  }
+  console.debug(`[app-follow] ${event}`, { t });
+}
 
 const shikiTheme = ref('github-dark');
 
