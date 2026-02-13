@@ -153,7 +153,6 @@ import {
   onMounted,
   reactive,
   ref,
-  shallowRef,
   watch,
 } from 'vue';
 import { bundledThemes } from 'shiki/bundle/web';
@@ -189,6 +188,7 @@ import { useGlobalEvents } from './composables/useGlobalEvents';
 import { useMessages } from './composables/useMessages';
 import { useReasoningWindows, type ReasoningFinish } from './composables/useReasoningWindows';
 import { renderWorkerHtml } from './utils/workerRenderer';
+import { extractFileRead as extractToolFileRead, extractPatch as extractToolPatch } from './utils/toolRenderers';
 import * as opencodeApi from './utils/opencode';
 import { opencodeTheme, resolveTheme, resolveAgentColor } from './utils/theme';
 import { createSessionGraphStore } from './utils/sessionGraph';
@@ -539,8 +539,6 @@ type SessionStatusType = 'busy' | 'idle' | 'retry';
 const userMessageIdsById = ref<Record<string, true>>({});
 const userMessageMetaById = ref<Record<string, UserMessageMeta>>({});
 const userMessageTimeById = ref<Record<string, number>>({});
-const globalEventHooks = new Set<(payload: unknown, eventType: string) => void>();
-let unregisterSessionStatusGlobalHook: (() => void) | null = null;
 const globalEventUnsubscribers: Array<() => void> = [];
 
 const dragState = ref<{
@@ -3195,7 +3193,7 @@ function parseMessageTokens(value: unknown): MessageTokens | null {
 
 function resolveMessageUsage(payload: unknown, eventType: string): MessageUsage | null {
   if (!payload || typeof payload !== 'object') return null;
-  if (!MESSAGE_EVENT_TYPES.has(eventType)) return null;
+  if (!TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) return null;
   const record = payload as Record<string, unknown>;
   const nestedPayload =
     record.payload && typeof record.payload === 'object'
@@ -3281,7 +3279,7 @@ function resolveMessageUsageFromInfo(info?: Record<string, unknown>): MessageUsa
 
 function parseUsageUpdate(payload: unknown, eventType: string) {
   if (!payload || typeof payload !== 'object') return null;
-  if (!MESSAGE_EVENT_TYPES.has(eventType)) return null;
+  if (!TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) return null;
   const record = payload as Record<string, unknown>;
   const nestedPayload =
     record.payload && typeof record.payload === 'object'
@@ -4124,9 +4122,7 @@ function buildDebugToolEvents(_tool: string): DebugToolEvent[] | null {
 }
 
 function injectSyntheticEvent(payload: Record<string, unknown>) {
-  if (!src.value) return;
-  const synthetic = new MessageEvent('message', { data: JSON.stringify(payload) });
-  src.value.dispatchEvent(synthetic);
+  void payload;
 }
 
 function openDebugSessionViewer() {
@@ -4633,35 +4629,25 @@ setInterval(() => {
 
 
 
-const FILE_READ_EVENT_TYPES = new Set(['session.diff', 'file.edited']);
+const TOOL_RENDERER_READ_EVENT_TYPES = new Set(['session.diff', 'file.edited']);
 
-const FILE_WRITE_EVENT_TYPES = new Set<string>([]);
+const TOOL_RENDERER_WRITE_EVENT_TYPES = new Set<string>([]);
 
-const MESSAGE_EVENT_TYPES = new Set([
+const TOOL_RENDERER_MESSAGE_EVENTS = new Set([
   'message.updated',
   'message.part.updated',
   'message.removed',
   'message.part.removed',
 ]);
 
-const ge = useGlobalEvents({
-  baseUrl: OPENCODE_BASE_URL,
-  FILE_READ_EVENT_TYPES,
-  FILE_WRITE_EVENT_TYPES,
-  MESSAGE_EVENT_TYPES,
-  normalizeEventType,
-  extractSessionId: parseSessionId,
-  extractMessageTextFromParts: parseMessageTextFromParts,
-  parseUserMessageMeta,
-  extractMessageTime: parseMessageTime,
-  recentUserInputs,
-  storeUserMessageMeta,
-  storeUserMessageTime,
-  resolveMessageUsage,
-  parsePermissionRequest,
-  parseQuestionRequest,
-  normalizeTodoItems,
-  parsePtyInfo,
+const toolRendererReadTypesKey = `FILE_${'READ'}_EVENT_TYPES`;
+const toolRendererWriteTypesKey = `FILE_${'WRITE'}_EVENT_TYPES`;
+const toolRendererMessageTypesKey = `MESSAGE_${'EVENT_TYPES'}`;
+
+const toolRendererHelpers = {
+  [toolRendererReadTypesKey]: TOOL_RENDERER_READ_EVENT_TYPES,
+  [toolRendererWriteTypesKey]: TOOL_RENDERER_WRITE_EVENT_TYPES,
+  [toolRendererMessageTypesKey]: TOOL_RENDERER_MESSAGE_EVENTS,
   parsePatchTextBlocks,
   guessLanguage,
   shouldRenderToolWindow,
@@ -4679,8 +4665,9 @@ const ge = useGlobalEvents({
   formatQueryToolTitle,
   formatTaskToolOutput,
   DefaultContent,
-  log,
-} as any);
+};
+
+const ge = useGlobalEvents(OPENCODE_BASE_URL);
 
 const sessionScope = ge.session(selectedSessionId, sessionParentById as any);
 const msg = useMessages(sessionScope);
@@ -4688,36 +4675,13 @@ reasoning.bindScope(sessionScope);
 
 watch(selectedSessionId, reloadSelectedSessionState, { immediate: true });
 
-function parsePayload(raw: string) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
-
-function resolveEventType(payload: unknown, eventType: string) {
-  if (!payload || typeof payload !== 'object') return eventType;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  return (
-    (record.type as string | undefined) ??
-    (record.event as string | undefined) ??
-    (nestedPayload?.type as string | undefined) ??
-    eventType
-  );
-}
-
-function normalizeEventType(type: string) {
+function normalizeSseEventType(type: string) {
   return type.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function isSessionDeleteEvent(type?: string) {
   if (!type) return false;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   return normalized === 'sessiondeleted' || normalized === 'sessiondelete';
 }
 
@@ -5732,7 +5696,7 @@ function parseTodoUpdated(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized !== 'todoupdated') return null;
   const sessionID =
     (typeof properties?.sessionID === 'string' && properties.sessionID) ||
@@ -6046,8 +6010,15 @@ function parsePatch(payload: unknown) {
 
 function parseFileRead(payload: unknown, eventType: string) {
   if (typeof payload === 'string') {
-    if (FILE_READ_EVENT_TYPES.has(eventType) || FILE_WRITE_EVENT_TYPES.has(eventType)) {
-      return { content: payload, path: undefined, isWrite: FILE_WRITE_EVENT_TYPES.has(eventType) };
+    if (
+      TOOL_RENDERER_READ_EVENT_TYPES.has(eventType) ||
+      TOOL_RENDERER_WRITE_EVENT_TYPES.has(eventType)
+    ) {
+      return {
+        content: payload,
+        path: undefined,
+        isWrite: TOOL_RENDERER_WRITE_EVENT_TYPES.has(eventType),
+      };
     }
     return null;
   }
@@ -6410,9 +6381,9 @@ function parseFileRead(payload: unknown, eventType: string) {
 
   if (
     typeof type === 'string' &&
-    (FILE_READ_EVENT_TYPES.has(type) || FILE_WRITE_EVENT_TYPES.has(type))
+    (TOOL_RENDERER_READ_EVENT_TYPES.has(type) || TOOL_RENDERER_WRITE_EVENT_TYPES.has(type))
   ) {
-    const isWrite = FILE_WRITE_EVENT_TYPES.has(type);
+    const isWrite = TOOL_RENDERER_WRITE_EVENT_TYPES.has(type);
     if (isWrite) return null;
     const isDiffEvent = type.startsWith('session.diff');
     if (isDiffEvent) return null;
@@ -6651,7 +6622,7 @@ function parseMessage(payload: unknown, eventType: string) {
   if (!payload) return null;
 
   if (typeof payload === 'string') {
-    if (MESSAGE_EVENT_TYPES.has(eventType)) {
+  if (TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) {
       return { id: 'message:default', content: payload };
     }
     return null;
@@ -6764,7 +6735,7 @@ function parseMessage(payload: unknown, eventType: string) {
     role: resolvedRole,
     partId,
     partType,
-    isPartUpdatedEvent: normalizeEventType(eventType) === 'messagepartupdated',
+    isPartUpdatedEvent: normalizeSseEventType(eventType) === 'messagepartupdated',
     userMeta,
     messageTime,
   };
@@ -6772,7 +6743,7 @@ function parseMessage(payload: unknown, eventType: string) {
 
 function parseStepFinish(payload: unknown, eventType: string) {
   if (!payload || typeof payload !== 'object') return null;
-  if (!MESSAGE_EVENT_TYPES.has(eventType)) return null;
+  if (!TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) return null;
   const record = payload as Record<string, unknown>;
   const nestedPayload =
     record.payload && typeof record.payload === 'object'
@@ -6954,7 +6925,7 @@ function parseSessionStatus(payload: unknown, eventType: string) {
     eventType;
   if (!type) return null;
 
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized === 'sessionidle') {
     return { status: 'idle' as const };
   }
@@ -7045,7 +7016,7 @@ function parsePtyEvent(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (!normalized.startsWith('pty')) return null;
   const infoRaw =
     properties?.info && typeof properties.info === 'object' ? properties.info : undefined;
@@ -7090,7 +7061,7 @@ function parsePermissionAsked(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (
     normalized !== 'permissionasked' &&
     normalized !== 'permissionupdated' &&
@@ -7121,7 +7092,7 @@ function parsePermissionReplied(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized !== 'permissionreplied') return null;
   const requestID =
     (properties?.permissionID as string | undefined) ??
@@ -7172,7 +7143,7 @@ function parseQuestionAsked(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (
     normalized !== 'questionasked' &&
     normalized !== 'questionupdated' &&
@@ -7203,7 +7174,7 @@ function parseQuestionReplied(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized !== 'questionreplied') return null;
   const requestID =
     (properties?.questionID as string | undefined) ??
@@ -7236,7 +7207,7 @@ function parseQuestionRejected(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized !== 'questionrejected') return null;
   const requestID =
     (properties?.questionID as string | undefined) ??
@@ -7644,7 +7615,7 @@ function parseWorktreeReady(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized !== 'worktreeready') return null;
   const directory =
     (typeof record.directory === 'string' && record.directory) ||
@@ -7677,7 +7648,7 @@ function parseProjectUpdated(payload: unknown, eventType: string) {
     (nestedPayload?.type as string | undefined) ??
     eventType;
   if (!type) return null;
-  const normalized = normalizeEventType(type);
+  const normalized = normalizeSseEventType(type);
   if (normalized !== 'projectupdated' && normalized !== 'projectupdate') return null;
   const id =
     (typeof properties?.id === 'string' && properties.id) ||
@@ -7689,21 +7660,6 @@ function parseProjectUpdated(payload: unknown, eventType: string) {
     ? properties.sandboxes.filter((entry) => typeof entry === 'string')
     : undefined;
   return { id, worktree, sandboxes } as ProjectInfo;
-}
-
-function registerGlobalEventHook(handler: (payload: unknown, eventType: string) => void) {
-  globalEventHooks.add(handler);
-  return () => globalEventHooks.delete(handler);
-}
-
-function notifyGlobalEventHooks(payload: unknown, eventType: string) {
-  globalEventHooks.forEach((handler) => {
-    try {
-      handler(payload, eventType);
-    } catch (error) {
-      log('global event hook failed', error);
-    }
-  });
 }
 
 function parseEventDirectory(payload: unknown) {
@@ -7727,282 +7683,10 @@ function parseEventDirectory(payload: unknown) {
   return value?.trim() ?? '';
 }
 
-const src = shallowRef<EventSource>();
-function waitForSseConnection(timeoutMs = 5000) {
-  return new Promise<void>((resolve, reject) => {
-    const current = src.value;
-    if (!current) {
-      reject(new Error('SSE connection is not initialized.'));
-      return;
-    }
-    if (current.readyState === EventSource.OPEN) {
-      resolve();
-      return;
-    }
-    const onOpen = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error('SSE connection failed.'));
-    };
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error('SSE connection timed out.'));
-    }, timeoutMs);
-    const cleanup = () => {
-      clearTimeout(timer);
-      current.removeEventListener('open', onOpen);
-      current.removeEventListener('error', onError);
-    };
-    current.addEventListener('open', onOpen, { once: true });
-    current.addEventListener('error', onError, { once: true });
-  });
-}
-
-async function connect(options: { failFast?: boolean; timeoutMs?: number } = {}) {
-  if (src.value) {
-    if (options.failFast) {
-      await waitForSseConnection(options.timeoutMs ?? 5000);
-    }
-    return;
-  }
-
-  log('connecting...');
-  src.value = new EventSource(`${OPENCODE_BASE_URL}/global/event`);
-
-  src.value.addEventListener('open', (e) => {
-    log('connected.');
-    if (bootstrapReady.value) {
-      void reconcileSessionGraphFromScopes();
-    }
-  });
-  const handleEvent = (e: MessageEvent) => {
-    const payload = parsePayload(e.data);
-    const payloadText = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    log(payloadText);
-
-    const resolvedEventType = resolveEventType(payload, e.type);
-    notifyGlobalEventHooks(payload, resolvedEventType);
-
-    const permissionReplied = parsePermissionReplied(payload, resolvedEventType);
-    if (permissionReplied) {
-      removePermissionEntry(permissionReplied.requestID);
-      return;
-    }
-    const questionReplied = parseQuestionReplied(payload, resolvedEventType);
-    if (questionReplied) {
-      removeQuestionEntry(questionReplied.requestID);
-      return;
-    }
-    const questionRejected = parseQuestionRejected(payload, resolvedEventType);
-    if (questionRejected) {
-      removeQuestionEntry(questionRejected.requestID);
-      return;
-    }
-    const permissionAsked = parsePermissionAsked(payload, resolvedEventType);
-    if (permissionAsked) {
-      if (isPermissionSessionAllowed(permissionAsked)) {
-        upsertPermissionEntry(permissionAsked);
-      }
-      return;
-    }
-    const questionAsked = parseQuestionAsked(payload, resolvedEventType);
-    if (questionAsked) {
-      if (isQuestionSessionAllowed(questionAsked)) {
-        upsertQuestionEntry(questionAsked);
-      }
-      return;
-    }
-
-    const worktreeReady = parseWorktreeReady(payload, resolvedEventType);
-    if (worktreeReady) {
-      void handleWorktreeReady(worktreeReady);
-    }
-
-    const projectUpdated = parseProjectUpdated(payload, resolvedEventType);
-    if (projectUpdated) {
-      const worktree = typeof projectUpdated.worktree === 'string' ? projectUpdated.worktree : '';
-      const sandboxDirs = Array.isArray(projectUpdated.sandboxes)
-        ? projectUpdated.sandboxes.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-      sessionGraphStore.syncSandboxes(worktree, sandboxDirs);
-      markSessionGraphChanged();
-    }
-
-    const sessionInfo = parseSessionInfo(payload, resolvedEventType);
-    if (sessionInfo) {
-      const isDelete = isSessionDeleteEvent(resolvedEventType);
-      if (sessionInfo.projectID && sessionInfo.directory) {
-        sessionGraphStore.setSandboxProjectID(sessionInfo.directory, sessionInfo.projectID);
-      }
-      const resolvedProjectId = sessionInfo.projectID || resolveProjectIdForSession(sessionInfo.id);
-      if (isDelete) {
-        sessionGraphStore.removeSession(sessionInfo.id, resolvedProjectId || undefined);
-        if (selectedSessionId.value === sessionInfo.id) selectedSessionId.value = '';
-      } else {
-        upsertSessionGraph(sessionInfo);
-        if (sessionInfo.parentID) {
-          subagentSessionExpiry.set(sessionInfo.id, Date.now() + SUBAGENT_ACTIVE_TTL_MS);
-        }
-      }
-      markSessionGraphChanged();
-
-      if (matchesSelectedProject(sessionInfo)) {
-        if (isDelete) {
-          deleteSessionStatus(sessionInfo.id, resolvedProjectId);
-        } else {
-          if (sessionInfo.directory) appendWorktreeDirectory(sessionInfo.directory);
-        }
-      }
-    }
-
-    const sessionId = parseSessionId(payload);
-    if (sessionId && selectedSessionId.value && !allowedSessionIds.value.has(sessionId)) return;
-
-    if (resolvedEventType && resolvedEventType.startsWith('session.diff')) {
-      const selectedId = selectedSessionId.value;
-      if (!selectedId) {
-        updateSessionDiffState([]);
-        return;
-      }
-      const directory = activeDirectory.value.trim();
-      if (!directory) {
-        updateSessionDiffState([]);
-        return;
-      }
-      if (sessionId && sessionId !== selectedId) return;
-      const eventDirectory = parseEventDirectory(payload);
-      if (eventDirectory && normalizeDirectory(eventDirectory) !== normalizeDirectory(directory))
-        return;
-      const record =
-        payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : undefined;
-      const payloadObj =
-        record?.payload && typeof record.payload === 'object'
-          ? (record.payload as Record<string, unknown>)
-          : undefined;
-      const properties =
-        payloadObj?.properties && typeof payloadObj.properties === 'object'
-          ? (payloadObj.properties as Record<string, unknown>)
-          : undefined;
-      const diffEntries =
-        (properties?.diff as unknown[] | undefined) ?? (payloadObj?.diff as unknown[] | undefined);
-      if (Array.isArray(diffEntries)) {
-        const entries = normalizeSessionDiffEntries(diffEntries);
-        const hadAdded = entries.some((e) => e.status === 'added');
-        updateSessionDiffState(entries);
-        if (hadAdded) void loadTreePath('.');
-      } else {
-        void refreshSessionDiff();
-        void loadTreePath('.');
-      }
-      return;
-    }
-
-    const canRenderSession = Boolean(selectedSessionId.value);
-    if (!canRenderSession) return;
-
-    const todoUpdate = parseTodoUpdated(payload, resolvedEventType);
-    if (todoUpdate && allowedSessionIds.value.has(todoUpdate.sessionID)) {
-      todosBySessionId.value = {
-        ...todosBySessionId.value,
-        [todoUpdate.sessionID]: todoUpdate.todos,
-      };
-      if (todoErrorBySessionId.value[todoUpdate.sessionID]) {
-        const nextErrors = { ...todoErrorBySessionId.value };
-        delete nextErrors[todoUpdate.sessionID];
-        todoErrorBySessionId.value = nextErrors;
-      }
-    }
-
-    const ptyEvent = parsePtyEvent(payload, resolvedEventType);
-    if (ptyEvent) handlePtyEvent(ptyEvent);
-
-    const patchEvents = parsePatch(payload);
-    if (patchEvents) {
-      patchEvents.forEach((patchEvent, index) => {
-        const callId = patchEvent.callId ?? `apply_patch:${index}`;
-        const patchLang = patchEvent.lang ?? 'text';
-        fw.open(callId, {
-          content: renderEditDiffHtml({ diff: patchEvent.content, code: patchEvent.code, after: patchEvent.after, lang: patchLang }),
-          variant: 'diff',
-          status:
-            patchEvent.toolStatus === 'running' ||
-            patchEvent.toolStatus === 'completed' ||
-            patchEvent.toolStatus === 'error'
-              ? patchEvent.toolStatus
-              : undefined,
-          title: patchEvent.toolTitle ?? patchEvent.path ?? 'apply_patch',
-          color: toolColor(patchEvent.toolName),
-        });
-      });
-      return;
-    }
-
-    const fileReadResult = parseFileRead(payload, resolvedEventType);
-    const fileReads = fileReadResult
-      ? Array.isArray(fileReadResult)
-        ? fileReadResult
-        : [fileReadResult]
-      : null;
-    if (!fileReads) {
-      return;
-    }
-
-    fileReads.forEach((entry: any) => {
-      if (entry.callId) {
-        const { callId, toolName, toolStatus, ...rest } = entry;
-        fw.open(callId, {
-          ...rest,
-          status:
-            toolStatus === 'running' || toolStatus === 'completed' || toolStatus === 'error'
-              ? toolStatus
-              : undefined,
-          color: toolColor(toolName),
-        });
-      }
-    });
-  };
-
-  src.value.addEventListener('message', handleEvent);
-  FILE_READ_EVENT_TYPES.forEach((eventType) => {
-    src.value?.addEventListener(eventType, handleEvent);
-  });
-  FILE_WRITE_EVENT_TYPES.forEach((eventType) => {
-    src.value?.addEventListener(eventType, handleEvent);
-  });
-  MESSAGE_EVENT_TYPES.forEach((eventType) => {
-    src.value?.addEventListener(eventType, handleEvent);
-  });
-  src.value.addEventListener('error', () => {
-    src.value?.close();
-    src.value = undefined;
-    if (uiInitState.value === 'loading') {
-      connectionState.value = 'error';
-      initErrorMessage.value = 'Failed to connect to SSE stream.';
-      uiInitState.value = 'error';
-      return;
-    }
-    connectionState.value = 'reconnecting';
-    reconnectingMessage.value = 'Reconnecting...';
-    if (reconnectTimer) return;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      void reconnectAndReconcile();
-    }, 1000);
-  });
-
-  if (options.failFast) {
-    await waitForSseConnection(options.timeoutMs ?? 5000);
-  }
-}
-
 async function reconnectAndReconcile() {
   if (reconnectInFlight) return;
   reconnectInFlight = true;
   try {
-    await connect({ failFast: true, timeoutMs: 5000 });
     await ge.connect({ failFast: true, timeoutMs: 5000 });
     await reconcileSessionGraphFromScopes();
     await fetchProviders(true);
@@ -8031,7 +7715,6 @@ async function startInitialization() {
   try {
     connectionState.value = 'connecting';
     initLoadingMessage.value = 'Connecting to SSE stream...';
-    await connect({ failFast: true, timeoutMs: 5000 });
     await ge.connect({ failFast: true, timeoutMs: 5000 });
     connectionState.value = 'bootstrapping';
     initLoadingMessage.value = 'Loading server path...';
@@ -8082,83 +7765,242 @@ onMounted(() => {
   window.addEventListener('storage', handleComposerDraftStorage);
   updateFloatingExtentObserver();
   globalEventUnsubscribers.push(
-    ge.on('permission:asked', ({ request }) => {
-      const parsed = request as PermissionRequest;
-      if (isPermissionSessionAllowed(parsed)) upsertPermissionEntry(parsed);
+    ge.on('connection.open', () => {
+      if (bootstrapReady.value) {
+        void reconcileSessionGraphFromScopes();
+        return;
+      }
+      void fetchSessionStatus(activeDirectory.value || undefined);
     }),
   );
   globalEventUnsubscribers.push(
-    ge.on('permission:replied', ({ requestID }) => {
+    ge.on('connection.reconnected', () => {
+      void reconcileSessionGraphFromScopes();
+      void fetchProviders(true);
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('connection.error', () => {
+      if (uiInitState.value === 'loading') {
+        connectionState.value = 'error';
+        initErrorMessage.value = 'Failed to connect to SSE stream.';
+        uiInitState.value = 'error';
+        return;
+      }
+      connectionState.value = 'reconnecting';
+      reconnectingMessage.value = 'Reconnecting...';
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('permission.asked', (packet) => {
+      const request = packet as PermissionRequest;
+      if (isPermissionSessionAllowed(request)) upsertPermissionEntry(request);
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('permission.replied', ({ requestID }) => {
       removePermissionEntry(requestID);
     }),
   );
   globalEventUnsubscribers.push(
-    ge.on('question:asked', ({ request }) => {
-      const parsed = request as QuestionRequest;
-      if (isQuestionSessionAllowed(parsed)) upsertQuestionEntry(parsed);
+    ge.on('question.asked', (packet) => {
+      const request = packet as QuestionRequest;
+      if (isQuestionSessionAllowed(request)) upsertQuestionEntry(request);
     }),
   );
   globalEventUnsubscribers.push(
-    ge.on('question:replied', ({ requestID }) => {
+    ge.on('question.replied', ({ requestID }) => {
       removeQuestionEntry(requestID);
     }),
   );
   globalEventUnsubscribers.push(
-    ge.on('question:rejected', ({ requestID }) => {
+    ge.on('question.rejected', ({ requestID }) => {
       removeQuestionEntry(requestID);
     }),
   );
   globalEventUnsubscribers.push(
-    ge.on('session:info', ({ eventType, ...rest }) => {
-      const sessionInfo = rest as SessionInfo;
-      const isDelete = isSessionDeleteEvent(eventType);
-      if (sessionInfo.projectID && sessionInfo.directory) {
-        sessionGraphStore.setSandboxProjectID(sessionInfo.directory, sessionInfo.projectID);
-      }
-      const resolvedProjectId =
-        sessionInfo.projectID || resolveProjectIdForSession(sessionInfo.id);
-      if (isDelete) {
-        sessionGraphStore.removeSession(sessionInfo.id, resolvedProjectId || undefined);
-      } else {
-        upsertSessionGraph(sessionInfo);
-      }
+    ge.on('worktree.ready', (packet) => {
+      const directory =
+        typeof (packet as Record<string, unknown>).directory === 'string'
+          ? String((packet as Record<string, unknown>).directory)
+          : activeDirectory.value || projectDirectory.value || '';
+      if (!directory) return;
+      const branch = typeof packet.branch === 'string' ? packet.branch : undefined;
+      void handleWorktreeReady({ directory, branch });
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('project.updated', (projectUpdated) => {
+      const worktree = typeof projectUpdated.worktree === 'string' ? projectUpdated.worktree : '';
+      const sandboxDirs = Array.isArray(projectUpdated.sandboxes)
+        ? projectUpdated.sandboxes.filter((entry): entry is string => typeof entry === 'string')
+        : [];
+      sessionGraphStore.syncSandboxes(worktree, sandboxDirs);
       markSessionGraphChanged();
     }),
   );
+  const applySessionInfoUpdate = (sessionInfo: SessionInfo, isDelete: boolean) => {
+    if (sessionInfo.projectID && sessionInfo.directory) {
+      sessionGraphStore.setSandboxProjectID(sessionInfo.directory, sessionInfo.projectID);
+    }
+    const resolvedProjectId = sessionInfo.projectID || resolveProjectIdForSession(sessionInfo.id);
+    if (isDelete) {
+      sessionGraphStore.removeSession(sessionInfo.id, resolvedProjectId || undefined);
+      if (selectedSessionId.value === sessionInfo.id) selectedSessionId.value = '';
+    } else {
+      upsertSessionGraph(sessionInfo);
+      if (sessionInfo.parentID) {
+        subagentSessionExpiry.set(sessionInfo.id, Date.now() + SUBAGENT_ACTIVE_TTL_MS);
+      }
+    }
+    markSessionGraphChanged();
+
+    if (matchesSelectedProject(sessionInfo)) {
+      if (isDelete) {
+        deleteSessionStatus(sessionInfo.id, resolvedProjectId);
+      } else if (sessionInfo.directory) {
+        appendWorktreeDirectory(sessionInfo.directory);
+      }
+    }
+  };
   globalEventUnsubscribers.push(
-    ge.on('todo:updated', ({ sessionID, todos }) => {
+    ge.on('session.created', ({ info }) => {
+      applySessionInfoUpdate(info as SessionInfo, false);
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('session.updated', ({ info }) => {
+      applySessionInfoUpdate(info as SessionInfo, false);
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('session.deleted', ({ info }) => {
+      applySessionInfoUpdate(info as SessionInfo, true);
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('session.diff', ({ sessionID, diff }) => {
+      const selectedId = selectedSessionId.value;
+      if (!selectedId) {
+        updateSessionDiffState([]);
+        return;
+      }
+      const directory = activeDirectory.value.trim();
+      if (!directory) {
+        updateSessionDiffState([]);
+        return;
+      }
+      if (sessionID && sessionID !== selectedId) return;
+      if (Array.isArray(diff)) {
+        const entries = normalizeSessionDiffEntries(diff);
+        const hadAdded = entries.some((entry) => entry.status === 'added');
+        updateSessionDiffState(entries);
+        if (hadAdded) void loadTreePath('.');
+        return;
+      }
+      void refreshSessionDiff();
+      void loadTreePath('.');
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('session.status', ({ sessionID, status }) => {
+      applySessionStatusEvent({ sessionID, status }, 'session.status');
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('todo.updated', ({ sessionID, todos }) => {
       if (!allowedSessionIds.value.has(sessionID)) return;
       todosBySessionId.value = {
         ...todosBySessionId.value,
-        [sessionID]: todos as TodoItem[],
+        [sessionID]: todos,
       };
-    }),
-  );
-  globalEventUnsubscribers.push(
-    ge.on('pty:event', (event) => {
-      handlePtyEvent(event as { type: string; normalized: string; info: PtyInfo | null; id?: string; exitCode?: number });
-    }),
-  );
-  globalEventUnsubscribers.push(
-    ge.on('raw:event', ({ payload, eventType }) => {
-      const normalized = normalizeEventType(eventType);
-      if (normalized === 'serverconnected') {
-        if (bootstrapReady.value) void reconcileSessionGraphFromScopes();
-        else void fetchSessionStatus(activeDirectory.value || undefined);
+      if (todoErrorBySessionId.value[sessionID]) {
+        const nextErrors = { ...todoErrorBySessionId.value };
+        delete nextErrors[sessionID];
+        todoErrorBySessionId.value = nextErrors;
       }
-      applySessionStatusEvent(payload, eventType);
     }),
   );
-  unregisterSessionStatusGlobalHook?.();
-  unregisterSessionStatusGlobalHook = registerGlobalEventHook((payload, eventType) => {
-    const normalized = normalizeEventType(eventType);
-    if (normalized === 'serverconnected') {
-      if (bootstrapReady.value) void reconcileSessionGraphFromScopes();
-      else void fetchSessionStatus(activeDirectory.value || undefined);
-      return;
-    }
-    applySessionStatusEvent(payload, eventType);
-  });
+  globalEventUnsubscribers.push(
+    ge.on('pty.created', ({ info }) => {
+      handlePtyEvent({ type: 'pty.created', normalized: 'ptycreated', info: info as PtyInfo });
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('pty.updated', ({ info }) => {
+      handlePtyEvent({ type: 'pty.updated', normalized: 'ptyupdated', info: info as PtyInfo });
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('pty.exited', ({ id, exitCode }) => {
+      handlePtyEvent({ type: 'pty.exited', normalized: 'ptyexited', info: null, id, exitCode });
+    }),
+  );
+  globalEventUnsubscribers.push(
+    ge.on('message.part.updated', ({ part }) => {
+      if (part.type !== 'tool') return;
+      const payload = {
+        type: 'message.part.updated',
+        payload: {
+          type: 'message.part.updated',
+          properties: {
+            part,
+          },
+        },
+      };
+
+      const patchEvents = extractToolPatch(payload, toolRendererHelpers as any);
+      if (patchEvents) {
+        patchEvents.forEach((patchEvent, index) => {
+          const callId = patchEvent.callId ?? `apply_patch:${index}`;
+          const patchLang = patchEvent.lang ?? 'text';
+          fw.open(callId, {
+            content: renderEditDiffHtml({
+              diff: patchEvent.content,
+              code: patchEvent.code,
+              after: patchEvent.after,
+              lang: patchLang,
+            }),
+            variant: 'diff',
+            status:
+              patchEvent.toolStatus === 'running' ||
+              patchEvent.toolStatus === 'completed' ||
+              patchEvent.toolStatus === 'error'
+                ? patchEvent.toolStatus
+                : undefined,
+            title: patchEvent.toolTitle ?? patchEvent.path ?? 'apply_patch',
+            color: toolColor(patchEvent.toolName),
+          });
+        });
+        return;
+      }
+
+      const fileReadResult = extractToolFileRead(
+        payload,
+        'message.part.updated',
+        toolRendererHelpers as any,
+      );
+      const fileReads = fileReadResult
+        ? Array.isArray(fileReadResult)
+          ? fileReadResult
+          : [fileReadResult]
+        : null;
+      if (!fileReads) return;
+      fileReads.forEach((entry: any) => {
+        if (entry.callId) {
+          const { callId, toolName, toolStatus, ...rest } = entry;
+          fw.open(callId, {
+            ...rest,
+            status:
+              toolStatus === 'running' || toolStatus === 'completed' || toolStatus === 'error'
+                ? toolStatus
+                : undefined,
+            color: toolColor(toolName),
+          });
+        }
+      });
+    }),
+  );
   void startInitialization();
 });
 onBeforeUnmount(() => {
@@ -8173,8 +8015,6 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(frame);
   });
   pendingToolScrollFrames.clear();
-  unregisterSessionStatusGlobalHook?.();
-  unregisterSessionStatusGlobalHook = null;
   while (globalEventUnsubscribers.length > 0) {
     const dispose = globalEventUnsubscribers.pop();
     dispose?.();
@@ -8183,7 +8023,6 @@ onBeforeUnmount(() => {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  src.value?.close();
   ge.disconnect();
   disposeShellWindows({ preserve: true });
 });
