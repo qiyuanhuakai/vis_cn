@@ -8,6 +8,7 @@ const INTERVENTION_TOLERANCE_PX = 2;
 const MAX_FRAME_DT_MS = 50;
 const POPUP_DURATION_MS = 150;
 const NATIVE_SMOOTH_TIMEOUT_MS = 1_500;
+const USER_SCROLL_INTENT_WINDOW_MS = 240;
 
 type SmoothEngine = 'raf' | 'native';
 
@@ -19,6 +20,15 @@ type ScrollFollowOptions = {
   smoothOnInitialFollow?: boolean;
   enabled?: boolean;
 };
+
+function followDebug(event: string, detail?: Record<string, unknown>) {
+  const t = typeof performance !== 'undefined' ? Number(performance.now().toFixed(1)) : 0;
+  if (detail) {
+    console.debug(`[follow] ${event}`, { t, ...detail });
+    return;
+  }
+  console.debug(`[follow] ${event}`, { t });
+}
 
 export function useScrollFollow(
   containerEl: Ref<HTMLElement | undefined>,
@@ -39,9 +49,26 @@ export function useScrollFollow(
   let popupTimerId: ReturnType<typeof setTimeout> | null = null;
   let animating = false;
   let lastSetScrollTop = -1;
+  let lastObservedScrollTop = 0;
+  let lastObservedScrollHeight = 0;
   let contentChangeScheduled = false;
   let nativeSmoothMonitorTimeout: ReturnType<typeof setTimeout> | null = null;
   let nativeSmoothCleanup: (() => void) | null = null;
+  let lastUserScrollIntentAt = 0;
+  let pointerInteracting = false;
+
+  function nowMs() {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  function markUserScrollIntent(source: string) {
+    lastUserScrollIntentAt = nowMs();
+    followDebug('userScrollIntent', { source });
+  }
+
+  function hasRecentUserScrollIntent() {
+    return pointerInteracting || nowMs() - lastUserScrollIntentAt <= USER_SCROLL_INTENT_WINDOW_MS;
+  }
 
   const showResumeButton = computed(() => {
     return scrollMode.value === 'follow' && !isFollowing.value;
@@ -62,11 +89,18 @@ export function useScrollFollow(
 
   function pauseTracking() {
     isTrackingPaused.value = true;
+    followDebug('pauseTracking');
   }
 
   function resumeTracking(options: { syncToBottom?: boolean } = {}) {
+    followDebug('resumeTracking:start', {
+      wasPaused: isTrackingPaused.value,
+      syncToBottom: Boolean(options.syncToBottom),
+      isFollowing: isFollowing.value,
+    });
     if (!isTrackingPaused.value) {
       if (options.syncToBottom) scrollToBottom(false);
+      followDebug('resumeTracking:already-active');
       return;
     }
     if (options.syncToBottom) {
@@ -79,6 +113,10 @@ export function useScrollFollow(
     const el = containerEl.value;
     if (!el) return;
     isFollowing.value = isAtBottom(el);
+    followDebug('resumeTracking:done', {
+      isFollowing: isFollowing.value,
+      atBottom: isAtBottom(el),
+    });
   }
 
   function runWithoutTracking<T>(fn: () => T): T {
@@ -143,12 +181,21 @@ export function useScrollFollow(
     const target = el.scrollHeight - el.clientHeight;
     if (target <= 0) return;
     if (Math.abs(el.scrollTop - target) < 1) return;
+    followDebug('scrollToBottom:start', {
+      smooth,
+      from: el.scrollTop,
+      target,
+      isFollowing: isFollowing.value,
+    });
 
     if (!smooth) {
       clearNativeSmoothMonitor();
       cancelAnimation();
       el.scrollTop = target;
       lastSetScrollTop = target;
+      lastObservedScrollTop = target;
+      lastObservedScrollHeight = el.scrollHeight;
+      followDebug('scrollToBottom:jump', { top: el.scrollTop, target });
       return;
     }
 
@@ -184,6 +231,11 @@ export function useScrollFollow(
         if (scrollMode.value === 'follow') {
           isFollowing.value = isAtBottom(el);
         }
+        followDebug('scrollToBottom:intervened', {
+          top: el.scrollTop,
+          lastSetScrollTop,
+          isFollowing: isFollowing.value,
+        });
         return;
       }
 
@@ -196,6 +248,7 @@ export function useScrollFollow(
         el.scrollTop = target;
         lastSetScrollTop = target;
         animating = false;
+        followDebug('scrollToBottom:raf-complete', { top: el.scrollTop, target });
         return;
       }
 
@@ -211,12 +264,28 @@ export function useScrollFollow(
   }
 
   function scheduleAutoScroll(smooth: boolean) {
-    if (isTrackingPaused.value) return;
-    if (contentChangeScheduled) return;
+    if (isTrackingPaused.value) {
+      followDebug('scheduleAutoScroll:skip-paused', { smooth });
+      return;
+    }
+    if (contentChangeScheduled) {
+      followDebug('scheduleAutoScroll:skip-queued', { smooth });
+      return;
+    }
     contentChangeScheduled = true;
+    followDebug('scheduleAutoScroll:queued', {
+      smooth,
+      mode: scrollMode.value,
+      isFollowing: isFollowing.value,
+    });
     requestAnimationFrame(() => {
       contentChangeScheduled = false;
       const m = scrollMode.value;
+      followDebug('scheduleAutoScroll:run', {
+        smooth,
+        mode: m,
+        isFollowing: isFollowing.value,
+      });
       if (m === 'force') {
         scrollToBottom(smooth);
       } else if (m === 'follow' && isFollowing.value) {
@@ -231,17 +300,64 @@ export function useScrollFollow(
     if (scrollMode.value !== 'follow') return;
     const el = containerEl.value;
     if (!el) return;
-    isFollowing.value = isAtBottom(el);
+    const atBottom = isAtBottom(el);
+    const delta = el.scrollTop - lastObservedScrollTop;
+    const scrollHeightDelta = el.scrollHeight - lastObservedScrollHeight;
+    const hasUserIntent = hasRecentUserScrollIntent();
+    lastObservedScrollTop = el.scrollTop;
+    lastObservedScrollHeight = el.scrollHeight;
+    followDebug('onScroll', {
+      top: el.scrollTop,
+      delta,
+      scrollHeight: el.scrollHeight,
+      scrollHeightDelta,
+      clientHeight: el.clientHeight,
+      atBottom,
+      hasUserIntent,
+      isFollowingBefore: isFollowing.value,
+      lastSetScrollTop,
+    });
+    if (atBottom) {
+      isFollowing.value = true;
+      followDebug('onScroll:setFollowing', { isFollowing: true, reason: 'at-bottom' });
+      return;
+    }
+    if (!isFollowing.value) {
+      followDebug('onScroll:setFollowing', { isFollowing: false, reason: 'already-unlocked' });
+      return;
+    }
+    if (
+      lastSetScrollTop >= 0 &&
+      Math.abs(el.scrollTop - lastSetScrollTop) <= INTERVENTION_TOLERANCE_PX
+    ) {
+      followDebug('onScroll:setFollowing', { isFollowing: true, reason: 'programmatic-near-target' });
+      return;
+    }
+    if (delta < -INTERVENTION_TOLERANCE_PX && scrollHeightDelta <= 0 && hasUserIntent) {
+      isFollowing.value = false;
+      followDebug('onScroll:setFollowing', { isFollowing: false, reason: 'scroll-up' });
+      return;
+    }
+    followDebug('onScroll:setFollowing', { isFollowing: true, reason: 'keep-locked' });
   }
 
   function onContentMutation() {
     if (isTrackingPaused.value) return;
+    followDebug('onContentMutation');
     scheduleAutoScroll(smoothOnMutation);
   }
 
   function onContainerResize() {
     if (isTrackingPaused.value) return;
     const m = scrollMode.value;
+    const el = containerEl.value;
+    followDebug('onContainerResize', {
+      mode: m,
+      isFollowing: isFollowing.value,
+      top: el?.scrollTop,
+      scrollHeight: el?.scrollHeight,
+      clientHeight: el?.clientHeight,
+    });
     if (m === 'force' || (m === 'follow' && isFollowing.value)) {
       scrollToBottom(false);
     }
@@ -249,10 +365,12 @@ export function useScrollFollow(
 
   function resumeFollow(smooth = true) {
     isFollowing.value = true;
+    followDebug('resumeFollow', { smooth });
     scrollToBottom(smooth);
   }
 
   function startObserving(el: HTMLElement) {
+    followDebug('startObserving', { top: el.scrollTop });
     mutationObserver = new MutationObserver(onContentMutation);
     mutationObserver.observe(el, {
       childList: true,
@@ -276,7 +394,56 @@ export function useScrollFollow(
   }
 
   function setup(el: HTMLElement) {
+    followDebug('setup', { top: el.scrollTop });
+    lastObservedScrollTop = el.scrollTop;
+    lastObservedScrollHeight = el.scrollHeight;
     el.addEventListener('scroll', onScroll, { passive: true });
+    const wheelIntentHandler = () => markUserScrollIntent('wheel');
+    const touchIntentHandler = () => markUserScrollIntent('touchmove');
+    const pointerDownIntentHandler = () => {
+      pointerInteracting = true;
+      markUserScrollIntent('pointerdown');
+    };
+    el.addEventListener('wheel', wheelIntentHandler, { passive: true });
+    el.addEventListener('touchmove', touchIntentHandler, { passive: true });
+    el.addEventListener('pointerdown', pointerDownIntentHandler);
+    const clearPointerInteraction = () => {
+      pointerInteracting = false;
+    };
+    window.addEventListener('pointerup', clearPointerInteraction);
+    window.addEventListener('pointercancel', clearPointerInteraction);
+    (
+      el as HTMLElement & {
+        __clearPointerInteraction?: () => void;
+        __wheelIntentHandler?: () => void;
+        __touchIntentHandler?: () => void;
+        __pointerDownIntentHandler?: () => void;
+      }
+    ).__clearPointerInteraction = clearPointerInteraction;
+    (
+      el as HTMLElement & {
+        __clearPointerInteraction?: () => void;
+        __wheelIntentHandler?: () => void;
+        __touchIntentHandler?: () => void;
+        __pointerDownIntentHandler?: () => void;
+      }
+    ).__wheelIntentHandler = wheelIntentHandler;
+    (
+      el as HTMLElement & {
+        __clearPointerInteraction?: () => void;
+        __wheelIntentHandler?: () => void;
+        __touchIntentHandler?: () => void;
+        __pointerDownIntentHandler?: () => void;
+      }
+    ).__touchIntentHandler = touchIntentHandler;
+    (
+      el as HTMLElement & {
+        __clearPointerInteraction?: () => void;
+        __wheelIntentHandler?: () => void;
+        __touchIntentHandler?: () => void;
+        __pointerDownIntentHandler?: () => void;
+      }
+    ).__pointerDownIntentHandler = pointerDownIntentHandler;
 
     if (observeDelayMs <= 0) {
       startObserving(el);
@@ -290,7 +457,25 @@ export function useScrollFollow(
   }
 
   function teardown(el: HTMLElement) {
+    followDebug('teardown', { top: el.scrollTop });
     el.removeEventListener('scroll', onScroll);
+    const clearPointerInteraction = (
+      el as HTMLElement & { __clearPointerInteraction?: () => void }
+    ).__clearPointerInteraction;
+    const wheelIntentHandler = (el as HTMLElement & { __wheelIntentHandler?: () => void })
+      .__wheelIntentHandler;
+    const touchIntentHandler = (el as HTMLElement & { __touchIntentHandler?: () => void })
+      .__touchIntentHandler;
+    const pointerDownIntentHandler = (
+      el as HTMLElement & { __pointerDownIntentHandler?: () => void }
+    ).__pointerDownIntentHandler;
+    if (wheelIntentHandler) el.removeEventListener('wheel', wheelIntentHandler);
+    if (touchIntentHandler) el.removeEventListener('touchmove', touchIntentHandler);
+    if (pointerDownIntentHandler) el.removeEventListener('pointerdown', pointerDownIntentHandler);
+    if (clearPointerInteraction) {
+      window.removeEventListener('pointerup', clearPointerInteraction);
+      window.removeEventListener('pointercancel', clearPointerInteraction);
+    }
     if (popupTimerId !== null) {
       clearTimeout(popupTimerId);
       popupTimerId = null;

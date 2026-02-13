@@ -368,6 +368,15 @@ const emit = defineEmits<{
   (event: 'initial-render-complete'): void;
 }>();
 
+function followDebug(event: string, detail?: Record<string, unknown>) {
+  const t = typeof performance !== 'undefined' ? Number(performance.now().toFixed(1)) : 0;
+  if (detail) {
+    console.debug(`[output-panel] ${event}`, { t, ...detail });
+    return;
+  }
+  console.debug(`[output-panel] ${event}`, { t });
+}
+
 const filteredQueue = computed(() =>
   props.queue.filter((entry) => entry.isMessage && !entry.isSubagentMessage),
 );
@@ -646,22 +655,30 @@ function beginInitialRenderTracking() {
   const keys = collectInitialRenderKeys();
   pendingInitialRenderKeys.value = keys;
   initialRenderTrackingActive.value = keys.size > 0;
+  followDebug('beginInitialRenderTracking', { keyCount: keys.size });
   if (keys.size === 0) emit('initial-render-complete');
 }
 
 function handleScroll() {
   initialRenderTrackingActive.value = false;
+  followDebug('handleScroll');
   emit('scroll');
 }
 
 function handleMessageRendered(renderKey: string) {
   renderedKeys.value.add(renderKey);
+  followDebug('message-rendered', {
+    renderKey,
+    pendingBefore: pendingInitialRenderKeys.value.size,
+    tracking: initialRenderTrackingActive.value,
+  });
   emit('message-rendered');
   if (!initialRenderTrackingActive.value) return;
   const keys = pendingInitialRenderKeys.value;
   keys.delete(renderKey);
   if (keys.size > 0) return;
   initialRenderTrackingActive.value = false;
+  followDebug('initial-render-complete:all-rendered');
   emit('initial-render-complete');
 }
 
@@ -672,6 +689,7 @@ function setupContentResizeObserver() {
   const target = contentEl.value;
   if (!target) return;
   contentResizeObserver = new ResizeObserver(() => {
+    followDebug('content-resized', { queueLength: filteredQueue.value.length });
     emit('content-resized');
   });
   contentResizeObserver.observe(target);
@@ -832,6 +850,7 @@ onMounted(() => {
   setupContentResizeObserver();
   nextTick(() => {
     beginInitialRenderTracking();
+    followDebug('mounted:content-resized-kickoff');
     emit('content-resized');
   });
 });
