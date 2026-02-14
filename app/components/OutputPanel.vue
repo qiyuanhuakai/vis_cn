@@ -203,7 +203,6 @@ const props = defineProps<{
   busyDescendantCount?: number;
   theme: string;
   resolveAgentColor?: (agent?: string) => string;
-  messageDiffs?: Map<string, DiffEntry[]>;
 }>();
 
 const emit = defineEmits<{
@@ -374,22 +373,6 @@ function formatMessageError(error: { name: string; message: string }): string {
 }
 
 function getThreadDiffs(root: MessageInfo): DiffEntry[] {
-  const final = getFinalAnswer(root);
-  const map = props.messageDiffs;
-  if (map && typeof map.get === 'function') {
-    const keys = [
-      final?.id,
-      root.id,
-      final?.sessionID && final?.id ? `${final.sessionID}:${final.id}` : undefined,
-      root.sessionID && root.id ? `${root.sessionID}:${root.id}` : undefined,
-    ].filter((value): value is string => Boolean(value));
-    for (const key of keys) {
-      const mapped = map.get(key);
-      if (mapped && mapped.length > 0) return mapped;
-    }
-  }
-  const finalDiffs = getMessageDiffEntries(final);
-  if (finalDiffs.length > 0) return finalDiffs;
   return getMessageDiffEntries(root);
 }
 
@@ -400,8 +383,7 @@ function hasThreadDiffs(root: MessageInfo): boolean {
 function showThreadDiff(root: MessageInfo) {
   const diffs = getThreadDiffs(root);
   if (diffs.length === 0) return;
-  const messageKey = getFinalAnswer(root)?.id ?? root.id;
-  emit('show-message-diff', { messageKey, diffs });
+  emit('show-message-diff', { messageKey: root.id, diffs });
 }
 
 function canRevertThread(root: MessageInfo): boolean {

@@ -45,7 +45,6 @@
                 :busy-descendant-count="busyDescendantSessionIds.length"
                 :theme="shikiTheme"
                 :resolve-agent-color="resolveAgentColorForName"
-                :message-diffs="messageDiffsByKey"
                 @message-rendered="handleOutputPanelMessageRendered"
                 @resume-follow="handleOutputPanelResumeFollow"
                 @fork-message="handleForkMessage"
@@ -523,7 +522,6 @@ const runningToolIds = reactive(new Set<string>());
 const subagentSessionExpiry = new Map<string, number>();
 const messageSummaryTitleByMessageId = ref<Record<string, string>>({});
 type MessageDiffEntry = { file: string; diff: string; before?: string; after?: string };
-const messageDiffsByKey = reactive(new Map<string, Array<MessageDiffEntry>>());
 type SessionStatusType = 'busy' | 'idle' | 'retry';
 
 const userMessageIdsById = ref<Record<string, true>>({});
@@ -3942,7 +3940,6 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
         messageKey,
         sessionId,
       });
-      messageDiffsByKey.set(messageKey, roundDiffs);
     }
 
     if (!isSubagentMessage) {
@@ -4594,7 +4591,6 @@ async function reloadSelectedSessionState() {
   queue.value = [];
   fw.closeAll();
   msg.reset();
-  messageDiffsByKey.clear();
   reasoning.reset();
   subagentSessionExpiry.clear();
   retryStatus.value = null;
