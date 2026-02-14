@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
 }
 
 .message-content :deep(.markdown-host pre) {
-  margin: 0.3em 0;
+  margin: 0.5em 0.25em;
   padding: 0.45em 0.6em;
   border-radius: 6px;
   background: rgba(15, 23, 42, 0.5);
