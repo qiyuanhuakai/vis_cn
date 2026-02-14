@@ -25,6 +25,7 @@
             <div class="output-split" :class="{ 'todo-collapsed': sidePanelCollapsed }">
               <OutputPanel
                 ref="outputPanelRef"
+                :key="selectedSessionId"
                 class="output-panel"
                 :roots="msg.roots.value"
                 :get-children="msg.getChildren"

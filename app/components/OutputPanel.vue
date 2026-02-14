@@ -10,7 +10,7 @@
       >
         <div ref="contentEl" class="output-panel-content">
           <template v-for="root in visibleRoots" :key="root.id">
-            <div class="thread-block">
+            <div class="thread-block" v-show="!initialRenderTrackingActive">
                 <button
                   v-if="root.role === 'user' && root.sessionID"
                 type="button"
