@@ -529,6 +529,8 @@ const outputPanelContainerEl = computed(() => outputPanelRef.value?.panelEl ?? u
 const outputPanelScrollMode = computed<ScrollMode>(() => 'follow');
 const {
   isFollowing,
+  enableFollow,
+  resetFollow,
   resumeFollow,
   scrollToBottom: scrollOutputPanelToBottom,
   notifyContentChange,
@@ -4623,7 +4625,7 @@ async function sendMessage() {
     while (recentUserInputs.length > 20) recentUserInputs.shift();
   }
   messageInput.value = '';
-  resumeFollow();
+  enableFollow();
   isSending.value = true;
   sendStatus.value = 'Sending...';
   try {
@@ -4820,6 +4822,7 @@ async function reloadSelectedSessionState() {
   queue.value = [];
   fw.closeAll();
   msg.reset();
+  resetFollow();
   reasoning.reset();
   subagentSessionExpiry.clear();
   retryStatus.value = null;

@@ -349,6 +349,26 @@ export function useAutoScroller(
     scrollToBottom(smooth);
   }
 
+  function enableFollow() {
+    isFollowing.value = true;
+    followDebug('enableFollow');
+  }
+
+  function resetFollow() {
+    clearNativeSmoothMonitor();
+    cancelAnimation();
+    isTrackingPaused.value = false;
+    isFollowing.value = true;
+    pointerInteracting = false;
+    lastUserScrollIntentAt = 0;
+    const el = containerEl.value;
+    if (el) {
+      lastObservedScrollTop = el.scrollTop;
+      lastObservedScrollHeight = el.scrollHeight;
+    }
+    followDebug('resetFollow');
+  }
+
   function notifyContentChange(smooth = true) {
     followDebug('notifyContentChange', { smooth });
     scheduleAutoScroll(smooth);
@@ -460,6 +480,8 @@ export function useAutoScroller(
     pauseTracking,
     resumeTracking,
     runWithoutTracking,
+    enableFollow,
+    resetFollow,
     resumeFollow,
     scrollToBottom,
     notifyContentChange,
