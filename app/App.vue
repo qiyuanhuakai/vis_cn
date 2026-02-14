@@ -175,14 +175,24 @@
           <div class="app-loading-spinner" aria-hidden="true"></div>
           <p class="app-loading-title">Loading OpenCode session data...</p>
           <p class="app-loading-message">{{ uiInitState === 'error' ? initErrorMessage : initLoadingMessage }}</p>
-          <button
-            v-if="uiInitState === 'error'"
-            type="button"
-            class="app-loading-retry"
-            @click="startInitialization"
-          >
-            Retry
-          </button>
+          <div class="app-loading-actions">
+            <button
+              v-if="uiInitState === 'error'"
+              type="button"
+              class="app-loading-retry"
+              @click="startInitialization"
+            >
+              Retry
+            </button>
+            <button
+              v-if="uiInitState === 'loading'"
+              type="button"
+              class="app-loading-retry app-loading-abort"
+              @click="handleAbortInit"
+            >
+              Abort
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -284,6 +294,7 @@ const MAIN_REASONING_TITLE = 'Reasoning';
 const REASONING_CLOSE_DELAY_MS = 3000;
 const SHELL_PTY_STORAGE_KEY = 'opencode.shellPtys';
 const COMPOSER_DRAFT_STORAGE_KEY = 'opencode.composerDrafts.v1';
+const AUTH_ERROR_STORAGE_KEY = 'opencode.lastAuthError.v1';
 const ATTACHMENT_MIME_ALLOWLIST = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 type FileReadEntry = {
@@ -836,7 +847,7 @@ const isAborting = ref(false);
 const isBootstrapping = ref(false);
 const uiInitState = ref<'loading' | 'ready' | 'error' | 'login'>('loading');
 const initLoadingMessage = ref('Connecting to server...');
-const initErrorMessage = ref('Failed to load initial data. Reload to retry.');
+const initErrorMessage = ref('');
 const connectionState = ref<'connecting' | 'bootstrapping' | 'ready' | 'reconnecting' | 'error'>(
   'connecting',
 );
@@ -7507,9 +7518,17 @@ async function startInitialization() {
     await fetchProviders();
     await fetchAgents();
   } catch (error) {
+    const msg = toErrorMessage(error);
     connectionState.value = 'error';
-    initErrorMessage.value = toErrorMessage(error);
-    uiInitState.value = 'error';
+    if (/\(40[13]\)/.test(msg)) {
+      try { window.localStorage.setItem(AUTH_ERROR_STORAGE_KEY, msg); } catch {}
+      credentials.clear();
+      initErrorMessage.value = msg;
+      uiInitState.value = 'login';
+    } else {
+      initErrorMessage.value = msg;
+      uiInitState.value = 'error';
+    }
   } finally {
     initializationInFlight = false;
   }
@@ -7520,6 +7539,14 @@ function handleLogin() {
   const p = loginRequiresAuth.value ? loginPassword.value : '';
   credentials.save(loginUrl.value, u, p);
   void startInitialization();
+}
+
+function handleAbortInit() {
+  ge.disconnect();
+  initializationInFlight = false;
+  connectionState.value = 'connecting';
+  uiInitState.value = 'login';
+  initErrorMessage.value = '';
 }
 
 function handleLogout() {
@@ -7550,6 +7577,13 @@ onMounted(() => {
     void startInitialization();
   } else {
     uiInitState.value = 'login';
+    try {
+      const savedError = window.localStorage.getItem(AUTH_ERROR_STORAGE_KEY);
+      if (savedError) {
+        initErrorMessage.value = savedError;
+        window.localStorage.removeItem(AUTH_ERROR_STORAGE_KEY);
+      }
+    } catch {}
   }
   const availableThemes = getBundledThemeNames();
   const chosenTheme = pickShikiTheme(availableThemes);
@@ -7584,10 +7618,12 @@ onMounted(() => {
   );
   globalEventUnsubscribers.push(
     ge.on('connection.error', (payload) => {
-      if (payload.statusCode === 401) {
+      if (payload.statusCode === 401 || payload.statusCode === 403) {
+        const msg = `${payload.message} (HTTP ${payload.statusCode})`;
+        try { window.localStorage.setItem(AUTH_ERROR_STORAGE_KEY, msg); } catch {}
         credentials.clear();
         uiInitState.value = 'login';
-        initErrorMessage.value = 'Authentication failed. Please login again.';
+        initErrorMessage.value = msg;
         connectionState.value = 'error';
         return;
       }
@@ -7895,6 +7931,23 @@ onBeforeUnmount(() => {
 
 .app-loading-retry:hover {
   background: #334155;
+}
+
+.app-loading-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.app-loading-abort {
+  background: transparent;
+  border-color: #475569;
+  color: #94a3b8;
+}
+
+.app-loading-abort:hover {
+  background: #1e293b;
+  color: #e2e8f0;
 }
 
 .app-login-form {

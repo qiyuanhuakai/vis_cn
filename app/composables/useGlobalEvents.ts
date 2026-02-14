@@ -171,6 +171,66 @@ export function useGlobalEvents(baseUrl: string) {
     });
   }
 
+  function readStream(reader: ReadableStreamDefaultReader<Uint8Array>, options: ConnectionOptions) {
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    async function loop() {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const dataPrefix = 'data: ';
+            if (line.startsWith(dataPrefix)) {
+              const jsonStr = line.slice(dataPrefix.length);
+              const envelope = parseEnvelope(jsonStr);
+              if (envelope) {
+                routeEnvelope(envelope);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        if (abortController?.signal.aborted) {
+          return;
+        }
+        emitter.emit('connection.error', { message: String(error) });
+        abortController = undefined;
+        connectionResolved = false;
+        if (!disconnectRequested && !reconnectTimer) {
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            void connect(options);
+          }, 1000);
+        }
+        return;
+      }
+
+      emitter.emit('connection.error', { message: 'SSE stream closed.' });
+      abortController = undefined;
+      connectionResolved = false;
+
+      if (!disconnectRequested && !reconnectTimer) {
+        reconnectAttempt += 1;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          void connect(options);
+        }, 1000);
+      }
+    }
+
+    void loop();
+  }
+
   async function connect(options: ConnectionOptions = {}) {
     disconnectRequested = false;
     if (abortController) {
@@ -229,50 +289,8 @@ export function useGlobalEvents(baseUrl: string) {
         openResolver();
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const dataPrefix = 'data: ';
-            if (line.startsWith(dataPrefix)) {
-              const jsonStr = line.slice(dataPrefix.length);
-              const envelope = parseEnvelope(jsonStr);
-              if (envelope) {
-                routeEnvelope(envelope);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        if (abortController?.signal.aborted) {
-          return;
-        }
-        throw error;
-      }
-
-      emitter.emit('connection.error', { message: 'SSE stream closed.' });
-      abortController = undefined;
-      connectionResolved = false;
-
-      if (!disconnectRequested && !reconnectTimer) {
-        reconnectAttempt += 1;
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          void connect(options);
-        }, 1000);
-      }
+      // Read stream in background — do NOT await so connect() can return
+      readStream(response.body.getReader(), options);
     } catch (error) {
       abortController = undefined;
       connectionResolved = false;
