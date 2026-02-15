@@ -5462,7 +5462,7 @@ function openToolPartAsWindow(
           patchEvent.toolStatus === 'error'
             ? patchEvent.toolStatus
             : undefined,
-        title: patchEvent.toolTitle ?? patchEvent.path ?? 'apply_patch',
+        title: patchEvent.title,
         color: toolColor(patchEvent.toolName),
         ...overrides,
       });

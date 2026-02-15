@@ -146,7 +146,7 @@
                 class="history-item"
               >
                 <div class="history-meta">
-                  <span class="history-index">#{{ index + 1 }}</span>
+                  <span class="history-index">💬</span>
                   <span class="history-time">{{ formatMessageTime(getMessageTime(entry.message)) }}</span>
                   <span v-if="entry.message.role === 'assistant' && 'agent' in entry.message && entry.message.agent" class="history-agent">{{ entry.message.agent }}</span>
                 </div>
@@ -167,7 +167,7 @@
                 @click.stop="handleHistoryToolClick(entry.part)"
               >
                 <div class="history-meta">
-                  <span class="history-index">#{{ index + 1 }}</span>
+                  <span class="history-index">🔧</span>
                   <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
                   <span class="history-tool-badge" :class="`history-tool-${entry.part.tool}`">{{ toolBadgeLabel(entry.part.tool) }}</span>
                   <span class="history-tool-status" :class="`is-${toolStatusLabel(entry.part)}`">{{ toolStatusLabel(entry.part) }}</span>

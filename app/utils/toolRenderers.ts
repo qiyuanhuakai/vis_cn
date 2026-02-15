@@ -41,6 +41,23 @@ export type ToolRenderersHelpers = {
   WebContent: unknown;
 };
 
+function toolEmoji(tool: string): string {
+  switch (tool) {
+    case 'websearch':
+    case 'webfetch':
+    case 'codesearch':
+      return '🌐';
+    default:
+      return '🔧';
+  }
+}
+
+function toolPrefix(tool: string, label: string, detail?: string): string {
+  const icon = toolEmoji(tool);
+  const d = detail?.trim();
+  return d ? `${icon} [${label}] ${d}` : `${icon} [${label}]`;
+}
+
 export function extractStepFinish(
   payload: unknown,
   eventType: string,
@@ -166,6 +183,7 @@ export function extractPatch(
       toolStatus: status,
       toolName: 'apply_patch',
       toolTitle: block.path,
+      title: toolPrefix('apply_patch', 'PATCH', block.path),
       lang: helpers.guessLanguage(block.path),
       view: 'diff' as const,
     };
@@ -176,10 +194,16 @@ export function extractPatch(
 export function extractFileRead(
   payload: unknown,
   eventType: string,
-  helpers: Omit<ToolRenderersHelpers, 'MESSAGE_EVENT_TYPES' | 'parsePatchTextBlocks' | 'guessLanguage'>,
+  helpers: Omit<
+    ToolRenderersHelpers,
+    'MESSAGE_EVENT_TYPES' | 'parsePatchTextBlocks' | 'guessLanguage'
+  >,
 ) {
   if (typeof payload === 'string') {
-    if (helpers.FILE_READ_EVENT_TYPES.has(eventType) || helpers.FILE_WRITE_EVENT_TYPES.has(eventType)) {
+    if (
+      helpers.FILE_READ_EVENT_TYPES.has(eventType) ||
+      helpers.FILE_WRITE_EVENT_TYPES.has(eventType)
+    ) {
       return {
         content: payload,
         path: undefined,
@@ -224,7 +248,8 @@ export function extractFileRead(
       state?.metadata && typeof state.metadata === 'object'
         ? (state.metadata as Record<string, unknown>)
         : undefined;
-    const output = state?.output ?? (state?.metadata as Record<string, unknown> | undefined)?.output;
+    const output =
+      state?.output ?? (state?.metadata as Record<string, unknown> | undefined)?.output;
     const callId =
       (part?.callID as string | undefined) ??
       (part?.callId as string | undefined) ??
@@ -238,11 +263,6 @@ export function extractFileRead(
         : stateError !== undefined
           ? helpers.formatToolValue(stateError)
           : undefined;
-
-    const toolPrefix = (label: string, detail?: string) => {
-      const d = detail?.trim();
-      return d ? `[${label}] ${d}` : `[${label}]`;
-    };
 
     switch (tool) {
       case 'bash': {
@@ -270,7 +290,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('SHELL', titleDetail),
+          title: toolPrefix(tool, 'SHELL', titleDetail),
         };
       }
       case 'read': {
@@ -291,7 +311,7 @@ export function extractFileRead(
             callId,
             toolName: tool,
             toolStatus: 'completed',
-            title: toolPrefix('READ', readPath),
+            title: toolPrefix(tool, 'READ', readPath),
           };
         }
         const readLang = helpers.guessLanguageFromPath(readPath);
@@ -310,7 +330,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: 'completed',
-          title: toolPrefix('READ', readPath),
+          title: toolPrefix(tool, 'READ', readPath),
         };
       }
       case 'grep': {
@@ -327,7 +347,7 @@ export function extractFileRead(
             callId,
             toolName: tool,
             toolStatus: status,
-            title: toolPrefix('GREP', helpers.formatGlobToolTitle(input)),
+            title: toolPrefix(tool, 'GREP', helpers.formatGlobToolTitle(input)),
           };
         }
         const grepCode = outputText ?? errorText ?? '';
@@ -357,7 +377,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('GREP', helpers.formatGlobToolTitle(input)),
+          title: toolPrefix(tool, 'GREP', helpers.formatGlobToolTitle(input)),
         };
       }
       case 'glob': {
@@ -374,7 +394,7 @@ export function extractFileRead(
             callId,
             toolName: tool,
             toolStatus: status,
-            title: toolPrefix('GLOB', helpers.formatGlobToolTitle(input)),
+            title: toolPrefix(tool, 'GLOB', helpers.formatGlobToolTitle(input)),
           };
         }
         const globCode = outputText ?? errorText ?? '';
@@ -393,7 +413,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('GLOB', helpers.formatGlobToolTitle(input)),
+          title: toolPrefix(tool, 'GLOB', helpers.formatGlobToolTitle(input)),
         };
       }
       case 'list': {
@@ -411,7 +431,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('LS', helpers.formatListToolTitle(input)),
+          title: toolPrefix(tool, 'LS', helpers.formatListToolTitle(input)),
         };
       }
       case 'webfetch': {
@@ -427,7 +447,7 @@ export function extractFileRead(
             callId,
             toolName: tool,
             toolStatus: status,
-            title: toolPrefix('FETCH', helpers.formatWebfetchToolTitle(input)),
+            title: toolPrefix(tool, 'FETCH', helpers.formatWebfetchToolTitle(input)),
           };
         }
         const webfetchCode = outputText ?? errorText ?? '';
@@ -449,7 +469,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('FETCH', helpers.formatWebfetchToolTitle(input)),
+          title: toolPrefix(tool, 'FETCH', helpers.formatWebfetchToolTitle(input)),
         };
       }
       case 'websearch':
@@ -467,7 +487,7 @@ export function extractFileRead(
             callId,
             toolName: tool,
             toolStatus: status,
-            title: toolPrefix(searchPrefix, helpers.formatQueryToolTitle(input)),
+            title: toolPrefix(tool, searchPrefix, helpers.formatQueryToolTitle(input)),
           };
         }
         const searchPrefix = tool === 'websearch' ? 'SEARCH' : 'CODE';
@@ -487,11 +507,12 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix(searchPrefix, helpers.formatQueryToolTitle(input)),
+          title: toolPrefix(tool, searchPrefix, helpers.formatQueryToolTitle(input)),
         };
       }
       case 'task': {
-        const taskDescription = typeof input?.description === 'string' ? input.description.trim() : '';
+        const taskDescription =
+          typeof input?.description === 'string' ? input.description.trim() : '';
         const taskPrompt = typeof input?.prompt === 'string' ? input.prompt.trim() : '';
         const taskTitle =
           taskDescription || (taskPrompt ? taskPrompt.split('\n')[0].slice(0, 80) : '');
@@ -512,7 +533,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('TASK', taskTitle),
+          title: toolPrefix(tool, 'TASK', taskTitle),
         };
       }
       case 'batch': {
@@ -530,7 +551,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('BATCH'),
+          title: toolPrefix(tool, 'BATCH'),
         };
       }
       case 'write': {
@@ -552,7 +573,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('WRITE', writePath),
+          title: toolPrefix(tool, 'WRITE', writePath),
         };
       }
       case 'edit': {
@@ -578,7 +599,7 @@ export function extractFileRead(
           callId,
           toolName: tool,
           toolStatus: status,
-          title: toolPrefix('EDIT', editPath),
+          title: toolPrefix(tool, 'EDIT', editPath),
         };
       }
       case 'multiedit': {
@@ -603,9 +624,7 @@ export function extractFileRead(
             };
           })
           .filter(
-            (
-              item,
-            ): item is { diff: string; code: string | undefined; after: string | undefined } =>
+            (item): item is { diff: string; code: string | undefined; after: string | undefined } =>
               Boolean(item),
           );
         if (editEntries.length > 1) {
@@ -621,6 +640,7 @@ export function extractFileRead(
             toolName: tool,
             toolStatus: status,
             title: toolPrefix(
+              tool,
               'EDIT',
               editPathMulti
                 ? `${editPathMulti} (${index + 1}/${editEntries.length})`
@@ -640,7 +660,7 @@ export function extractFileRead(
             callId,
             toolName: tool,
             toolStatus: status,
-            title: toolPrefix('EDIT', editPathMulti),
+            title: toolPrefix(tool, 'EDIT', editPathMulti),
           };
         }
         return null;
