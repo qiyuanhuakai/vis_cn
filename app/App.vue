@@ -56,7 +56,6 @@
                 @fork-message="handleForkMessage"
                 @revert-message="handleRevertMessage"
                 @show-message-diff="handleShowMessageDiff"
-                @show-thread-history="handleShowThreadHistory"
                 @open-history-tool="handleOpenHistoryTool"
                 @close-history-tools="handleCloseHistoryTools"
                 @edit-message="handleEditMessage"
@@ -267,7 +266,6 @@ import { useReasoningWindows, type ReasoningFinish } from './composables/useReas
 import { renderWorkerHtml } from './utils/workerRenderer';
 import type { MessageInfo, MessagePart, ToolPart } from './types/sse';
 import { extractFileRead as extractToolFileRead, extractPatch as extractToolPatch } from './utils/toolRenderers';
-import ThreadHistoryWindow from './components/ThreadHistoryWindow.vue';
 import * as opencodeApi from './utils/opencode';
 import { opencodeTheme, resolveTheme, resolveAgentColor } from './utils/theme';
 import { createSessionGraphStore } from './utils/sessionGraph';
@@ -352,11 +350,6 @@ type FileContentResponse = {
   content?: string;
   encoding?: string;
   type?: 'text' | 'binary';
-};
-
-type ThreadHistoryPayload = {
-  root: MessageInfo;
-  messages: MessageInfo[];
 };
 
 type SessionDiffEntry = {
@@ -5393,40 +5386,6 @@ function handleShowMessageDiff(payload: { messageKey: string; diffs: Array<Messa
   });
 }
 
-// handleShowMessageHistory removed (legacy)
-
-function handleShowThreadHistory(payload: ThreadHistoryPayload) {
-  const { root, messages } = payload;
-  if (!root || messages.length === 0) return;
-  const validMessages = messages.filter((message) => msg.hasTextContent(message.id));
-  if (validMessages.length === 0) return;
-  const key = `thread-history:${root.id}`;
-  if (fw.has(key)) fw.close(key);
-  const pos = getFileViewerPosition();
-  fw.open(key, {
-    component: ThreadHistoryWindow,
-    props: {
-      root,
-      messages: validMessages,
-      theme: shikiTheme.value,
-      getMessageContent: msg.getTextContent,
-      getParts: msg.getParts,
-      'onOpen-history-tool': (payload: { part: ToolPart }) => {
-        handleOpenHistoryTool(payload);
-      },
-    },
-    closable: true,
-    resizable: true,
-    scroll: 'manual',
-    title: `Thread History (${validMessages.length})`,
-    x: pos.x,
-    y: pos.y,
-    width: FILE_VIEWER_WINDOW_WIDTH,
-    height: FILE_VIEWER_WINDOW_HEIGHT,
-    expiry: Infinity,
-    allowCollapse: true,
-  });
-}
 
 function openToolPartAsWindow(
   toolPart: ToolPart,

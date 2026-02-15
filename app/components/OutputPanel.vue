@@ -147,8 +147,8 @@
               >
                 <div class="history-meta">
                   <span class="history-index">💬</span>
-                  <span class="history-time">{{ formatMessageTime(getMessageTime(entry.message)) }}</span>
                   <span v-if="entry.message.role === 'assistant' && 'agent' in entry.message && entry.message.agent" class="history-agent">{{ entry.message.agent }}</span>
+                  <span class="history-time">{{ formatMessageTime(getMessageTime(entry.message)) }}</span>
                 </div>
                 <div class="history-content-wrapper">
                   <MessageViewer
@@ -168,9 +168,9 @@
               >
                 <div class="history-meta">
                   <span class="history-index">🔧</span>
-                  <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
                   <span class="history-tool-badge" :class="`history-tool-${entry.part.tool}`">{{ toolBadgeLabel(entry.part.tool) }}</span>
                   <span class="history-tool-status" :class="`is-${toolStatusLabel(entry.part)}`">{{ toolStatusLabel(entry.part) }}</span>
+                  <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
                 </div>
                 <div class="history-tool-content">{{ toolSummary(entry.part) }}</div>
               </div>
@@ -1262,8 +1262,11 @@ defineExpose({ panelEl });
   color: #e2e8f0;
 }
 
-.history-agent {
+.history-time {
   margin-left: auto;
+}
+
+.history-agent {
   padding: 2px 6px;
   background: #1e293b;
   border-radius: 4px;
