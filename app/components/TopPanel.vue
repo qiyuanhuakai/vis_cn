@@ -593,8 +593,8 @@ function handleOpenDirectory(close: () => void) {
 
 .tree-header-icon {
   flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: #64748b;
 }
 
@@ -604,7 +604,6 @@ function handleOpenDirectory(close: () => void) {
 
 .tree-sandbox-header {
   padding: 5px 8px 5px 24px;
-  border-top: 1px solid rgba(51, 65, 85, 0.45);
 }
 
 .tree-label {
@@ -688,6 +687,90 @@ function handleOpenDirectory(close: () => void) {
 .tree-session-row :deep(.ui-dropdown-item.is-active) {
   background: rgba(59, 130, 246, 0.2);
   border: 1px solid rgba(59, 130, 246, 0.45);
+}
+
+/* ===== Tree branch connectors ===== */
+
+/* --- Worktree → Sandbox branches --- */
+.tree-sandbox {
+  position: relative;
+}
+
+/* Non-last sandbox: ├── (vertical line continues to next sibling) */
+.tree-sandbox:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(71, 85, 105, 0.5);
+  pointer-events: none;
+}
+
+.tree-sandbox:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 20px;
+  width: 7px;
+  height: 0;
+  border-top: 1px solid rgba(71, 85, 105, 0.5);
+  pointer-events: none;
+}
+
+/* Last sandbox: └── (L-shape, no line below) */
+.tree-sandbox:last-child::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 0;
+  width: 7px;
+  height: 20px;
+  border-left: 1px solid rgba(71, 85, 105, 0.5);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+  border-bottom-left-radius: 4px;
+  pointer-events: none;
+}
+
+/* --- Sandbox → Session branches --- */
+.tree-session-row {
+  position: relative;
+}
+
+/* Non-last session: ├── */
+.tree-session-row:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 31px;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(71, 85, 105, 0.4);
+  pointer-events: none;
+}
+
+.tree-session-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 31px;
+  top: 50%;
+  width: 7px;
+  height: 0;
+  border-top: 1px solid rgba(71, 85, 105, 0.4);
+  pointer-events: none;
+}
+
+/* Last session: └── */
+.tree-session-row:last-child::before {
+  content: '';
+  position: absolute;
+  left: 31px;
+  top: 0;
+  width: 7px;
+  height: 50%;
+  border-left: 1px solid rgba(71, 85, 105, 0.4);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.4);
+  border-bottom-left-radius: 4px;
+  pointer-events: none;
 }
 
 .tree-session-main {
