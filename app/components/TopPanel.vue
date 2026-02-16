@@ -1,9 +1,9 @@
 <template>
   <div class="top-panel">
     <div class="top-row">
-      <div class="top-left flex items-baseline gap-2">
-        <div class="text-lg">Vis</div>
-        <div class="text-xs font-normal hidden lg:block">OpenCode Visualizer</div>
+      <div class="top-left flex items-center gap-2">
+        <img width="48px" height="24px" src="/logo.svg" class="" />
+        <div class="font-normal hidden lg:block relative top-0.5">OpenCode Visualizer</div>
       </div>
       <div class="top-center">
         <button

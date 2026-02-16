@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
 }
 
 .message-content :deep(.markdown-host p + p) {
-  margin-top: 0.3em;
+  margin-top: 0.5em;
 }
 
 .message-content :deep(.markdown-host h1),
