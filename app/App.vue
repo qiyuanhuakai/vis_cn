@@ -211,8 +211,7 @@
     <ProjectPicker
       :open="isProjectPickerOpen"
       :base-url="credentials.baseUrl.value"
-      :initial-directory="projectDirectory"
-      :authorization="credentials.authHeader.value"
+      :home-path="homePath"
       @close="isProjectPickerOpen = false"
       @select="handleProjectDirectorySelect"
     />
@@ -279,6 +278,7 @@ import { extractFileRead as extractToolFileRead, extractPatch as extractToolPatc
 import * as opencodeApi from './utils/opencode';
 import { opencodeTheme, resolveTheme, resolveAgentColor } from './utils/theme';
 import { createSessionGraphStore } from './utils/sessionGraph';
+import { splitFileContentDirectoryAndPath } from './utils/path';
 import { useCredentials } from './composables/useCredentials';
 import {
   StorageKeys,
@@ -1146,73 +1146,7 @@ function normalizeDirectory(value: string) {
   return trimmed || value;
 }
 
-function normalizeRelativePathNoParent(value: string) {
-  const segments = value.replace(/\\/g, '/').split('/');
-  const cleaned: string[] = [];
-  for (const segment of segments) {
-    if (!segment || segment === '.' || segment === '..') continue;
-    cleaned.push(segment);
-  }
-  return cleaned.join('/');
-}
 
-function normalizeAbsolutePathNoParent(value: string) {
-  const segments = value.replace(/\\/g, '/').split('/');
-  const cleaned: string[] = [];
-  for (const segment of segments) {
-    if (!segment || segment === '.') continue;
-    if (segment === '..') {
-      if (cleaned.length > 0) cleaned.pop();
-      continue;
-    }
-    cleaned.push(segment);
-  }
-  return `/${cleaned.join('/')}`;
-}
-
-function splitFileContentDirectoryAndPath(targetPath: string, sandboxDirectory: string) {
-  const sandbox = normalizeAbsolutePathNoParent(normalizeDirectory(sandboxDirectory));
-  const source = targetPath.replace(/\\/g, '/').trim();
-
-  if (!source) {
-    return {
-      directory: sandbox,
-      path: '.',
-    };
-  }
-
-  if (!source.startsWith('/')) {
-    const relative = normalizeRelativePathNoParent(source);
-    return {
-      directory: sandbox,
-      path: relative || '.',
-    };
-  }
-
-  const absolute = normalizeAbsolutePathNoParent(source);
-  if (absolute === sandbox) {
-    return {
-      directory: sandbox,
-      path: '.',
-    };
-  }
-  const sandboxPrefix = `${sandbox}/`;
-  if (absolute.startsWith(sandboxPrefix)) {
-    const relative = absolute.slice(sandboxPrefix.length);
-    return {
-      directory: sandbox,
-      path: relative || '.',
-    };
-  }
-
-  const slashIndex = absolute.lastIndexOf('/');
-  const directory = slashIndex > 0 ? absolute.slice(0, slashIndex) : '/';
-  const relative = slashIndex >= 0 ? absolute.slice(slashIndex + 1) : absolute;
-  return {
-    directory,
-    path: relative || '.',
-  };
-}
 
 function replaceHomePrefix(path: string) {
   const normalizedPath = normalizeDirectory(path);

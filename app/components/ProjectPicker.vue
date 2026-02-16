@@ -56,6 +56,8 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import Dropdown from './Dropdown.vue';
 import DropdownItem from './Dropdown/Item.vue';
+import * as opencodeApi from '../utils/opencode';
+import { splitFileContentDirectoryAndPath } from '../utils/path';
 
 type FileNode = {
   name: string;
@@ -68,8 +70,7 @@ type FileNode = {
 const props = defineProps<{
   open: boolean;
   baseUrl: string;
-  initialDirectory?: string;
-  authorization?: string;
+  homePath?: string;
 }>();
 
 const emit = defineEmits<{
@@ -81,7 +82,6 @@ const dropdownRef = ref<InstanceType<typeof Dropdown> | null>(null);
 const dialogRef = ref<HTMLDialogElement | null>(null);
 const inputRef = ref<HTMLInputElement | null>(null);
 const rawInput = ref('');
-const homePath = ref('');
 const isLoading = ref(false);
 const error = ref('');
 const allEntries = ref<FileNode[]>([]);
@@ -90,6 +90,12 @@ let fetchController: AbortController | null = null;
 let fetchRequestId = 0;
 
 const popupStyle = { maxHeight: '40vh' };
+
+/** Home path with trailing slash, for tilde expansion/collapse. */
+const homePrefix = computed(() => {
+  const h = props.homePath?.trim();
+  return h ? ensureTrailingSlash(h) : '';
+});
 
 // ---------------------------------------------------------------------------
 // Derived state
@@ -162,33 +168,19 @@ watch(
 // Initialisation
 // ---------------------------------------------------------------------------
 
-async function initPicker() {
+function initPicker() {
   error.value = '';
   allEntries.value = [];
   rawInput.value = '';
 
-  await loadHomePath();
-
-  const initial = homePath.value || '/';
+  const initial = homePrefix.value || '/';
   rawInput.value = collapseTilde(initial);
 
-  await nextTick();
-  inputRef.value?.focus();
-  const len = rawInput.value.length;
-  inputRef.value?.setSelectionRange(len, len);
-}
-
-async function loadHomePath() {
-  try {
-    const headers: Record<string, string> = {};
-    if (props.authorization) headers['Authorization'] = props.authorization;
-    const response = await fetch(`${props.baseUrl}/path`, { headers });
-    if (!response.ok) return;
-    const data = (await response.json()) as Record<string, string>;
-    homePath.value = data.home ? ensureTrailingSlash(data.home) : '';
-  } catch {
-    // ignore – homePath stays empty, tilde expansion is a no-op
-  }
+  nextTick(() => {
+    inputRef.value?.focus();
+    const len = rawInput.value.length;
+    inputRef.value?.setSelectionRange(len, len);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -208,16 +200,12 @@ async function fetchDirectory(dir: string) {
   error.value = '';
 
   try {
-    const headers: Record<string, string> = {};
-    if (props.authorization) headers['Authorization'] = props.authorization;
     const cleanDir = dir.replace(/\/+$/, '') || '/';
-    const params = new URLSearchParams({ directory: cleanDir, path: '' });
-    const response = await fetch(`${props.baseUrl}/file?${params.toString()}`, {
-      signal: controller.signal,
-      headers,
-    });
-    if (!response.ok) throw new Error(`Failed to list directory (${response.status})`);
-    const data = (await response.json()) as FileNode[];
+    const { directory, path } = splitFileContentDirectoryAndPath(cleanDir, null);
+    const data = await opencodeApi.listFiles(props.baseUrl, {
+      directory,
+      path,
+    }, { signal: controller.signal }) as FileNode[];
     if (requestId !== fetchRequestId) return;
     allEntries.value = Array.isArray(data) ? data : [];
   } catch (err) {
@@ -392,16 +380,18 @@ function handleDropdownOpenChange(value: boolean) {
 // ---------------------------------------------------------------------------
 
 function expandTilde(p: string): string {
-  if (!homePath.value) return p;
-  if (p === '~') return homePath.value;
-  if (p.startsWith('~/')) return homePath.value + p.slice(2);
+  const home = homePrefix.value;
+  if (!home) return p;
+  if (p === '~') return home;
+  if (p.startsWith('~/')) return home + p.slice(2);
   return p;
 }
 
 function collapseTilde(p: string): string {
-  if (!homePath.value) return p;
-  if (p === homePath.value || p === homePath.value.replace(/\/$/, '')) return '~/';
-  if (p.startsWith(homePath.value)) return '~/' + p.slice(homePath.value.length);
+  const home = homePrefix.value;
+  if (!home) return p;
+  if (p === home || p === home.replace(/\/$/, '')) return '~/';
+  if (p.startsWith(home)) return '~/' + p.slice(home.length);
   return p;
 }
 

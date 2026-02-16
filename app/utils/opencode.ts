@@ -4,6 +4,7 @@ type JsonBody = Record<string, unknown> | Array<unknown>;
 type RequestOptions = {
   instanceDirectory?: string;
   authorization?: string;
+  signal?: AbortSignal;
 };
 
 let defaultAuthorization: string | undefined;
@@ -58,6 +59,7 @@ async function getJson(
 ) {
   const response = await fetch(createUrl(baseUrl, path, params), {
     headers: buildHeaders(options),
+    signal: options?.signal,
   });
   if (!response.ok) throw new Error(`${path} request failed (${response.status})`);
   return parseJson(response);
