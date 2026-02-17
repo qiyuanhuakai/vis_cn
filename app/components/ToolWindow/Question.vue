@@ -345,8 +345,6 @@ function emitReject() {
 }
 
 .context-text-area {
-  max-height: 40%;
-  overflow-y: auto;
   border: 1px solid rgba(52, 211, 153, 0.2);
   border-radius: 8px;
   padding: 8px;
