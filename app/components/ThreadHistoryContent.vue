@@ -141,9 +141,8 @@ function toolStatusLabel(part: ToolPart): string {
 function toolHeaderColor(tool: string): string {
   switch (tool) {
     case 'bash': return '#a855f7';
-    case 'edit': case 'multiedit': return '#f97316';
+    case 'edit': case 'multiedit': case 'apply_patch': return '#f97316';
     case 'write': return '#f97316';
-    case 'apply_patch': return '#64748b';
     default: return '#64748b';
   }
 }
@@ -281,8 +280,8 @@ function formatMessageTime(value?: number) {
 }
 
 .history-tool-badge.history-tool-apply_patch {
-  background: rgba(88, 28, 135, 0.5);
-  color: #d8b4fe;
+  background: rgba(30, 58, 138, 0.5);
+  color: #bfdbfe;
 }
 
 .history-tool-status {

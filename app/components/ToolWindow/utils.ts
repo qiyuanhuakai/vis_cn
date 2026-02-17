@@ -68,7 +68,7 @@ export function toolColor(tool: string): string {
     case 'grep': return '#facc15';
     case 'glob': return '#facc15';
     case 'list': return '#60a5fa';
-    case 'edit': case 'multiedit': return '#f97316';
+    case 'edit': case 'multiedit': case 'apply_patch': return '#f97316';
     case 'write': return '#f97316';
     case 'webfetch': case 'websearch': case 'codesearch': return '#2dd4bf';
     case 'task': return '#818cf8';
