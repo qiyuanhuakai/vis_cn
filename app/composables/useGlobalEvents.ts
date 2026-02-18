@@ -1,13 +1,39 @@
-import { type Ref, watchEffect } from 'vue';
-import type { GlobalEventMap, SseEnvelope } from '../types/sse';
+import { type Ref, watch, watchEffect } from 'vue';
+import type { GlobalEventMap, SsePacket } from '../types/sse';
+import type { TabToWorkerMessage, WorkerToTabMessage } from '../types/sse-worker';
+import { createSseConnection } from '../utils/sseConnection';
 import { TypedEmitter } from '../utils/eventEmitter';
+import SseSharedWorker from '../workers/sse-shared-worker?sharedworker';
 
 type EventKey = keyof GlobalEventMap;
-type ConnectionOptions = { baseUrl?: string; failFast?: boolean; timeoutMs?: number; authorization?: string };
+type ConnectOptions = { failFast?: boolean; timeoutMs?: number };
+
+type CredentialsBinding = {
+  baseUrl: Ref<string>;
+  authHeader: Ref<string | undefined>;
+};
+
+type TransportCallbacks = {
+  onPacket: (packet: SsePacket) => void;
+  onOpen: () => void;
+  onError: (message: string, statusCode?: number) => void;
+  onReconnected: () => void;
+  onWorkerMessage?: (message: WorkerToTabMessage) => boolean;
+};
+
+type Transport = {
+  connect: (
+    baseUrl: string,
+    authorization: string | undefined,
+    options?: ConnectOptions,
+  ) => Promise<void>;
+  disconnect: () => void;
+  sendToWorker: (message: TabToWorkerMessage) => boolean;
+};
 
 export type SessionScope = {
   on<K extends EventKey>(event: K, listener: (payload: GlobalEventMap[K]) => void): () => void;
-  on(event: string, listener: (payload: any) => void): () => void;
+  on(event: string, listener: (payload: unknown) => void): () => void;
   dispose(): void;
 };
 
@@ -56,28 +82,6 @@ function isKnownEventType(value: string): value is EventKey {
   return KNOWN_EVENT_TYPES.has(value as EventKey);
 }
 
-function parseEnvelope(raw: string): SseEnvelope | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const record = parsed as Record<string, unknown>;
-  if (!record.payload || typeof record.payload !== 'object') return null;
-  const payload = record.payload as Record<string, unknown>;
-  if (typeof payload.type !== 'string') return null;
-  if (!payload.properties || typeof payload.properties !== 'object') return null;
-  return {
-    directory: typeof record.directory === 'string' ? record.directory : '',
-    payload: {
-      type: payload.type,
-      properties: payload.properties as Record<string, unknown>,
-    },
-  };
-}
-
 function extractSessionId(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') return undefined;
   const record = payload as Record<string, unknown>;
@@ -116,8 +120,8 @@ function computeAllowedSessionIds(
   });
   const stack = [rootId];
   while (stack.length > 0) {
-    const current = stack.pop()!;
-    if (allowed.has(current)) continue;
+    const current = stack.pop();
+    if (!current || allowed.has(current)) continue;
     allowed.add(current);
     const children = childrenByParent.get(current);
     if (children) stack.push(...children);
@@ -125,30 +129,43 @@ function computeAllowedSessionIds(
   return allowed;
 }
 
-export function useGlobalEvents(baseUrl: string) {
-  const emitter = new TypedEmitter<GlobalEventMap>();
-  let abortController: AbortController | undefined;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let reconnectAttempt = 0;
-  let disconnectRequested = false;
-  let connectionResolved = false;
+function normalizeBaseUrl(baseUrl: string) {
+  return baseUrl.replace(/\/+$/, '');
+}
 
-  function routeEnvelope(envelope: SseEnvelope) {
-    const type = envelope.payload.type;
-    if (!isKnownEventType(type)) return;
-    emitter.emit(type, envelope.payload.properties as GlobalEventMap[typeof type]);
-  }
-
+function createDirectTransport(callbacks: TransportCallbacks): Transport {
+  let connected = false;
   let openResolver: ((value: void) => void) | null = null;
   let openRejector: ((reason: Error) => void) | null = null;
 
+  const connection = createSseConnection({
+    onPacket(packet) {
+      callbacks.onPacket(packet);
+    },
+    onOpen(isReconnect) {
+      connected = true;
+      callbacks.onOpen();
+      if (isReconnect) callbacks.onReconnected();
+      if (openResolver) {
+        openResolver();
+        openResolver = null;
+        openRejector = null;
+      }
+    },
+    onError(message, statusCode) {
+      connected = false;
+      callbacks.onError(message, statusCode);
+      if (openRejector) {
+        openRejector(new Error(message));
+        openResolver = null;
+        openRejector = null;
+      }
+    },
+  });
+
   function waitForOpen(timeoutMs = 5000) {
     return new Promise<void>((resolve, reject) => {
-      if (!abortController) {
-        reject(new Error('SSE connection is not initialized.'));
-        return;
-      }
-      if (connectionResolved) {
+      if (connected || connection.isConnected()) {
         resolve();
         return;
       }
@@ -157,161 +174,234 @@ export function useGlobalEvents(baseUrl: string) {
         openRejector = null;
         reject(new Error('SSE connection timed out.'));
       }, timeoutMs);
-      openResolver = (value) => {
+      openResolver = () => {
         clearTimeout(timer);
-        resolve(value);
-        openResolver = null;
-        openRejector = null;
+        resolve();
       };
       openRejector = (error) => {
         clearTimeout(timer);
         reject(error);
-        openResolver = null;
-        openRejector = null;
       };
     });
   }
 
-  function scheduleReconnect(options: ConnectionOptions) {
-    if (disconnectRequested || reconnectTimer) return;
-    reconnectAttempt += 1;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      void connect(options);
-    }, 1000);
-  }
+  return {
+    async connect(baseUrl, authorization, options = {}) {
+      const normalized = normalizeBaseUrl(baseUrl);
+      if (!normalized) {
+        throw new Error('SSE base URL is empty.');
+      }
+      connection.connect({ baseUrl: normalized, authorization });
+      if (options.failFast) {
+        await waitForOpen(options.timeoutMs ?? 5000);
+      }
+    },
+    disconnect() {
+      connected = false;
+      connection.disconnect();
+      if (openRejector) {
+        openRejector(new Error('SSE connection aborted.'));
+        openResolver = null;
+        openRejector = null;
+      }
+    },
+    sendToWorker() {
+      return false;
+    },
+  };
+}
 
-  function readStream(reader: ReadableStreamDefaultReader<Uint8Array>, options: ConnectionOptions) {
-    const decoder = new TextDecoder();
-    let buffer = '';
+function createSharedWorkerTransport(callbacks: TransportCallbacks): Transport {
+  let worker: SharedWorker | null = null;
+  let connected = false;
+  let openResolver: ((value: void) => void) | null = null;
+  let openRejector: ((reason: Error) => void) | null = null;
 
-    async function loop() {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+  function ensureWorker() {
+    if (worker) return worker;
+    const instance = new SseSharedWorker();
+    instance.port.onmessage = (event: MessageEvent<WorkerToTabMessage>) => {
+      const message = event.data;
+      if (!message || typeof message !== 'object') return;
 
-          buffer += decoder.decode(value, { stream: true });
-
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const dataPrefix = 'data: ';
-            if (line.startsWith(dataPrefix)) {
-              const jsonStr = line.slice(dataPrefix.length);
-              const envelope = parseEnvelope(jsonStr);
-              if (envelope) {
-                routeEnvelope(envelope);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        if (abortController?.signal.aborted) {
-          return;
-        }
-        emitter.emit('connection.error', { message: String(error) });
-        abortController = undefined;
-        connectionResolved = false;
-        scheduleReconnect(options);
+      if (callbacks.onWorkerMessage?.(message)) {
         return;
       }
 
-      emitter.emit('connection.error', { message: 'SSE stream closed.' });
-      abortController = undefined;
-      connectionResolved = false;
-      scheduleReconnect(options);
-    }
-
-    void loop();
+      if (message.type === 'packet') {
+        callbacks.onPacket(message.packet);
+        return;
+      }
+      if (message.type === 'connection.open') {
+        connected = true;
+        callbacks.onOpen();
+        if (openResolver) {
+          openResolver();
+          openResolver = null;
+          openRejector = null;
+        }
+        return;
+      }
+      if (message.type === 'connection.reconnected') {
+        callbacks.onReconnected();
+        return;
+      }
+      if (message.type === 'connection.error') {
+        connected = false;
+        callbacks.onError(message.message, message.statusCode);
+        if (openRejector) {
+          openRejector(new Error(message.message));
+          openResolver = null;
+          openRejector = null;
+        }
+      }
+    };
+    instance.port.start();
+    worker = instance;
+    return instance;
   }
 
-  function startConnection(options: ConnectionOptions, isReconnect: boolean) {
-    const effectiveBaseUrl = options.baseUrl || baseUrl;
-    const headers: Record<string, string> = {};
-    if (options.authorization) {
-      headers['Authorization'] = options.authorization;
-    }
+  function waitForOpen(timeoutMs = 5000) {
+    return new Promise<void>((resolve, reject) => {
+      if (connected) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        openResolver = null;
+        openRejector = null;
+        reject(new Error('SSE connection timed out.'));
+      }, timeoutMs);
+      openResolver = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      openRejector = (error) => {
+        clearTimeout(timer);
+        reject(error);
+      };
+    });
+  }
 
-    void (async () => {
-      try {
-        const response = await fetch(`${effectiveBaseUrl}/global/event`, {
-          signal: abortController!.signal,
-          headers,
+  return {
+    async connect(baseUrl, authorization, options = {}) {
+      const normalized = normalizeBaseUrl(baseUrl);
+      if (!normalized) {
+        throw new Error('SSE base URL is empty.');
+      }
+      connected = false;
+      const message: TabToWorkerMessage = {
+        type: 'connect',
+        baseUrl: normalized,
+        authorization,
+      };
+      ensureWorker().port.postMessage(message);
+      if (options.failFast) {
+        await waitForOpen(options.timeoutMs ?? 5000);
+      }
+    },
+    disconnect() {
+      connected = false;
+      if (worker) {
+        const message: TabToWorkerMessage = { type: 'disconnect' };
+        worker.port.postMessage(message);
+      }
+      if (openRejector) {
+        openRejector(new Error('SSE connection aborted.'));
+        openResolver = null;
+        openRejector = null;
+      }
+    },
+    sendToWorker(message) {
+      if (!worker) return false;
+      worker.port.postMessage(message);
+      return true;
+    },
+  };
+}
+
+export function useGlobalEvents(credentials: CredentialsBinding) {
+  const emitter = new TypedEmitter<GlobalEventMap>();
+  let workerMessageHandler: ((message: WorkerToTabMessage) => boolean) | undefined;
+
+  function routePacket(packet: SsePacket) {
+    const type = packet.payload.type;
+    if (!isKnownEventType(type)) return;
+    emitter.emit(type, packet.payload.properties as GlobalEventMap[typeof type]);
+  }
+
+  const transport =
+    typeof SharedWorker !== 'undefined'
+      ? createSharedWorkerTransport({
+          onPacket: routePacket,
+          onOpen: () => emitter.emit('connection.open', {}),
+          onError: (message, statusCode) =>
+            emitter.emit('connection.error', { message, statusCode }),
+          onReconnected: () => emitter.emit('connection.reconnected', {}),
+          onWorkerMessage: (message) => workerMessageHandler?.(message) ?? false,
+        })
+      : createDirectTransport({
+          onPacket: routePacket,
+          onOpen: () => emitter.emit('connection.open', {}),
+          onError: (message, statusCode) =>
+            emitter.emit('connection.error', { message, statusCode }),
+          onReconnected: () => emitter.emit('connection.reconnected', {}),
+          onWorkerMessage: (message) => workerMessageHandler?.(message) ?? false,
         });
 
-        if (response.status === 401) {
-          abortController = undefined;
-          emitter.emit('connection.error', { message: 'Authentication failed.', statusCode: 401 });
-          if (openRejector) openRejector(new Error('Authentication failed.'));
-          return;
-        }
-
-        if (!response.ok || !response.body) {
-          abortController = undefined;
-          emitter.emit('connection.error', { message: `HTTP ${response.status}` });
-          if (openRejector) openRejector(new Error(`HTTP ${response.status}`));
-          scheduleReconnect(options);
-          return;
-        }
-
-        reconnectAttempt = 0;
-        connectionResolved = true;
-        emitter.emit('connection.open', {});
-        if (isReconnect) {
-          emitter.emit('connection.reconnected', {});
-        }
-        if (openResolver) openResolver();
-
-        readStream(response.body.getReader(), options);
-      } catch (error) {
-        abortController = undefined;
-        connectionResolved = false;
-
-        if (disconnectRequested) return;
-
-        emitter.emit('connection.error', { message: String(error) });
-        if (openRejector) openRejector(error instanceof Error ? error : new Error(String(error)));
-        scheduleReconnect(options);
+  let requested = false;
+  let lastKey = '';
+  const stopCredentialSync = watch(
+    [() => credentials.baseUrl.value, () => credentials.authHeader.value],
+    ([baseUrl, authHeader]) => {
+      if (!requested) return;
+      const normalized = normalizeBaseUrl(baseUrl);
+      if (!normalized) {
+        transport.disconnect();
+        lastKey = '';
+        return;
       }
-    })();
-  }
+      const nextKey = `${normalized}\u0000${authHeader ?? ''}`;
+      if (nextKey === lastKey) return;
+      lastKey = nextKey;
+      void transport.connect(normalized, authHeader);
+    },
+  );
 
-  async function connect(options: ConnectionOptions = {}) {
-    disconnectRequested = false;
-    if (abortController) {
-      if (options.failFast) await waitForOpen(options.timeoutMs ?? 5000);
-      return;
-    }
-
-    const isReconnect = reconnectAttempt > 0;
-    abortController = new AbortController();
-    connectionResolved = false;
-
-    startConnection(options, isReconnect);
-
-    if (options.failFast) await waitForOpen(options.timeoutMs ?? 5000);
+  async function connect(options: ConnectOptions = {}) {
+    const baseUrl = normalizeBaseUrl(credentials.baseUrl.value);
+    if (!baseUrl) throw new Error('SSE base URL is empty.');
+    requested = true;
+    lastKey = `${baseUrl}\u0000${credentials.authHeader.value ?? ''}`;
+    await transport.connect(baseUrl, credentials.authHeader.value, options);
   }
 
   function disconnect() {
-    disconnectRequested = true;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    abortController?.abort();
-    abortController = undefined;
-    connectionResolved = false;
-    if (openRejector) openRejector(new Error('SSE connection aborted.'));
+    requested = false;
+    lastKey = '';
+    transport.disconnect();
   }
 
-  function on<K extends EventKey>(event: K, listener: (payload: GlobalEventMap[K]) => void): () => void;
-  function on(event: string, listener: (payload: any) => void): () => void;
-  function on(event: string, listener: (payload: any) => void): () => void {
+  function setWorkerMessageHandler(handler?: (message: WorkerToTabMessage) => boolean) {
+    workerMessageHandler = handler;
+  }
+
+  function sendToWorker(message: TabToWorkerMessage) {
+    return transport.sendToWorker(message);
+  }
+
+  function onKnown<K extends EventKey>(event: K, listener: (payload: GlobalEventMap[K]) => void) {
+    return emitter.on(event, listener);
+  }
+
+  function on<K extends EventKey>(
+    event: K,
+    listener: (payload: GlobalEventMap[K]) => void,
+  ): () => void;
+  function on(event: string, listener: (payload: unknown) => void): () => void;
+  function on(event: string, listener: (payload: unknown) => void): () => void {
     if (!isKnownEventType(event)) return () => {};
-    return emitter.on(event, listener as any);
+    return onKnown(event, (payload) => listener(payload));
   }
 
   function session(
@@ -328,8 +418,8 @@ export function useGlobalEvents(baseUrl: string) {
       event: K,
       listener: (payload: GlobalEventMap[K]) => void,
     ): () => void;
-    function scopedOn(event: string, listener: (payload: any) => void): () => void;
-    function scopedOn(event: string, listener: (payload: any) => void): () => void {
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
       if (!isKnownEventType(event)) return () => {};
       const off = on(event, (payload) => {
         const sessionId = extractSessionId(payload);
@@ -360,8 +450,8 @@ export function useGlobalEvents(baseUrl: string) {
       event: K,
       listener: (payload: GlobalEventMap[K]) => void,
     ): () => void;
-    function scopedOn(event: string, listener: (payload: any) => void): () => void;
-    function scopedOn(event: string, listener: (payload: any) => void): () => void {
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void;
+    function scopedOn(event: string, listener: (payload: unknown) => void): () => void {
       if (!isKnownEventType(event)) return () => {};
       const off = on(event, (payload) => {
         const sessionId = extractSessionId(payload);
@@ -384,5 +474,26 @@ export function useGlobalEvents(baseUrl: string) {
     return { on: scopedOn, dispose };
   }
 
-  return { on, connect, disconnect, session, mainSession };
+  const stopAutoDisconnect = watch(
+    () => credentials.baseUrl.value,
+    (baseUrl) => {
+      if (baseUrl.trim()) return;
+      disconnect();
+    },
+  );
+
+  return {
+    on,
+    connect,
+    disconnect,
+    setWorkerMessageHandler,
+    sendToWorker,
+    session,
+    mainSession,
+    dispose() {
+      stopCredentialSync();
+      stopAutoDisconnect();
+      disconnect();
+    },
+  };
 }

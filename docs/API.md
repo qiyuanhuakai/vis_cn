@@ -6,11 +6,11 @@ OpenCode server REST API reference. Base URL: `http://localhost:4096` (default).
 
 ### Headers
 
-| Header | Required | Description |
-|--------|----------|-------------|
-| `Content-Type` | POST/PUT/PATCH/DELETE with body | `application/json` |
-| `x-opencode-directory` | No | Scopes the request to a specific instance directory |
-| `Authorization` | No | `Basic <base64(username:password)>` |
+| Header                 | Required                        | Description                                         |
+| ---------------------- | ------------------------------- | --------------------------------------------------- |
+| `Content-Type`         | POST/PUT/PATCH/DELETE with body | `application/json`                                  |
+| `x-opencode-directory` | No                              | Scopes the request to a specific instance directory |
+| `Authorization`        | No                              | `Basic <base64(username:password)>`                 |
 
 ### Instance Directory
 
@@ -21,11 +21,13 @@ Most endpoints accept an optional `query.directory` parameter (string). This sco
 All endpoints may return standard HTTP errors. Structured error bodies:
 
 **400 Bad Request** — `BadRequestError`
+
 ```json
 { "success": false, "data": null, "errors": [{ ... }] }
 ```
 
 **404 Not Found** — `NotFoundError`
+
 ```json
 { "name": "NotFoundError", "data": { "message": "..." } }
 ```
@@ -39,6 +41,7 @@ All endpoints may return standard HTTP errors. Structured error bodies:
 Server health check.
 
 - Response `200`:
+
 ```json
 { "healthy": true, "version": "0.0.3" }
 ```
@@ -568,7 +571,7 @@ Run a shell command in a session context.
 
 ## Permission
 
-### POST /session/{sessionID}/permissions/{permissionID} *(deprecated)*
+### POST /session/{sessionID}/permissions/{permissionID} _(deprecated)_
 
 Respond to a permission request (legacy endpoint — use [POST /permission/{requestID}/reply](#post-permissionrequestidreply) instead).
 
@@ -729,16 +732,16 @@ Search workspace symbols (functions, classes, variables, etc.) using LSP.
 
 Sends a `workspace/symbol` LSP request to **all** connected LSP clients in the project. Results are filtered to include only the following symbol kinds:
 
-| Kind | Value |
-|------|-------|
-| Class | 5 |
-| Function | 12 |
-| Method | 6 |
-| Interface | 11 |
-| Variable | 13 |
-| Constant | 14 |
-| Struct | 23 |
-| Enum | 10 |
+| Kind      | Value |
+| --------- | ----- |
+| Class     | 5     |
+| Function  | 12    |
+| Method    | 6     |
+| Interface | 11    |
+| Variable  | 13    |
+| Constant  | 14    |
+| Struct    | 23    |
+| Enum      | 10    |
 
 Results are limited to **10 per LSP client**, then flattened into a single array across all clients.
 
@@ -1053,6 +1056,7 @@ Subscribe to project-scoped SSE events. See [SSE.md](./SSE.md) for event types.
 Discriminated union on `type`. Used in the `parts` field of message/prompt requests.
 
 **TextPartInput**
+
 - `type`: `"text"` (required)
 - `text`: string (required)
 - `id?`: string
@@ -1062,6 +1066,7 @@ Discriminated union on `type`. Used in the `parts` field of message/prompt reque
 - `metadata?`: Record\<string, unknown\>
 
 **FilePartInput**
+
 - `type`: `"file"` (required)
 - `mime`: string (required)
 - `url`: string (required) — Data URL or file URL
@@ -1070,12 +1075,14 @@ Discriminated union on `type`. Used in the `parts` field of message/prompt reque
 - `source?`: [FilePartSource](#filepartsource)
 
 **AgentPartInput**
+
 - `type`: `"agent"` (required)
 - `name`: string (required) — Agent name
 - `id?`: string
 - `source?`: `{ value: string, start: number, end: number }`
 
 **SubtaskPartInput**
+
 - `type`: `"subtask"` (required)
 - `prompt`: string (required)
 - `description`: string (required)
@@ -1089,9 +1096,11 @@ Discriminated union on `type`. Used in the `parts` field of message/prompt reque
 Discriminated union on `type`.
 
 **OutputFormatText**
+
 - `type`: `"text"`
 
 **OutputFormatJsonSchema**
+
 - `type`: `"json_schema"`
 - `schema`: JSONSchema (required)
 - `retryCount?`: integer (default `2`, min `0`)
@@ -1158,6 +1167,7 @@ Discriminated union on `type`.
 All parts include base fields: `id`, `sessionID`, `messageID` (all string, required).
 
 **TextPart** — `type: "text"`
+
 - `text`: string
 - `synthetic?`: boolean
 - `ignored?`: boolean
@@ -1165,51 +1175,62 @@ All parts include base fields: `id`, `sessionID`, `messageID` (all string, requi
 - `metadata?`: Record\<string, unknown\>
 
 **ReasoningPart** — `type: "reasoning"`
+
 - `text`: string
 - `time`: `{ start: number, end?: number }`
 - `metadata?`: Record\<string, unknown\>
 
 **ToolPart** — `type: "tool"`
+
 - `callID`: string
 - `tool`: string
 - `state`: [ToolState](#toolstate)
 - `metadata?`: Record\<string, unknown\>
 
 **FilePart** — `type: "file"`
+
 - `mime`: string
 - `url`: string
 - `filename?`: string
 - `source?`: [FilePartSource](#filepartsource)
 
 **StepStartPart** — `type: "step-start"`
+
 - `snapshot?`: string
 
 **StepFinishPart** — `type: "step-finish"`
+
 - `reason`: string
 - `snapshot?`: string
 - `cost`: number
 - `tokens`: `{ total?: number, input: number, output: number, reasoning: number, cache: { read: number, write: number } }`
 
 **SnapshotPart** — `type: "snapshot"`
+
 - `snapshot`: string
 
 **PatchPart** — `type: "patch"`
+
 - `hash`: string
 - `files`: string[]
 
 **AgentPart** — `type: "agent"`
+
 - `name`: string
 - `source?`: `{ value: string, start: number, end: number }`
 
 **RetryPart** — `type: "retry"`
+
 - `attempt`: number
 - `error`: [APIError](#apierror)
 - `time`: `{ created: number }`
 
 **CompactionPart** — `type: "compaction"`
+
 - `auto`: boolean
 
 **SubtaskPart** — `type: "subtask"`
+
 - `prompt`: string
 - `description`: string
 - `agent`: string
@@ -1221,16 +1242,19 @@ All parts include base fields: `id`, `sessionID`, `messageID` (all string, requi
 Discriminated union on `status`.
 
 **ToolStatePending** — `status: "pending"`
+
 - `input`: Record\<string, unknown\>
 - `raw`: string
 
 **ToolStateRunning** — `status: "running"`
+
 - `input`: Record\<string, unknown\>
 - `time`: `{ start: number }`
 - `title?`: string
 - `metadata?`: Record\<string, unknown\>
 
 **ToolStateCompleted** — `status: "completed"`
+
 - `input`: Record\<string, unknown\>
 - `output`: string
 - `title`: string
@@ -1239,6 +1263,7 @@ Discriminated union on `status`.
 - `attachments?`: FilePart[]
 
 **ToolStateError** — `status: "error"`
+
 - `input`: Record\<string, unknown\>
 - `error`: string
 - `time`: `{ start: number, end: number }`
@@ -1249,10 +1274,12 @@ Discriminated union on `status`.
 Discriminated union on `type`.
 
 **FileSource** — `type: "file"`
+
 - `path`: string
 - `text`: `{ value: string, start: number, end: number }`
 
 **SymbolSource** — `type: "symbol"`
+
 - `path`: string
 - `name`: string
 - `kind`: number
@@ -1260,6 +1287,7 @@ Discriminated union on `type`.
 - `text`: `{ value: string, start: number, end: number }`
 
 **ResourceSource** — `type: "resource"`
+
 - `clientName`: string
 - `uri`: string
 - `text`: `{ value: string, start: number, end: number }`
@@ -1376,6 +1404,7 @@ Discriminated union on `type`.
 Discriminated union on `type`.
 
 **OAuth** — `type: "oauth"`
+
 - `refresh`: string (required)
 - `access`: string (required)
 - `expires`: number (required)
@@ -1383,9 +1412,11 @@ Discriminated union on `type`.
 - `enterpriseUrl?`: string
 
 **ApiAuth** — `type: "api"`
+
 - `key`: string (required)
 
 **WellKnownAuth** — `type: "wellknown"`
+
 - `key`: string (required)
 - `token`: string (required)
 
@@ -1503,21 +1534,27 @@ Workspace symbol returned by LSP `workspace/symbol`.
 Any of:
 
 **ProviderAuthError** — `name: "ProviderAuthError"`
+
 - `data`: `{ providerID: string, message: string }`
 
 **UnknownError** — `name: "UnknownError"`
+
 - `data`: `{ message: string }`
 
 **MessageOutputLengthError** — `name: "MessageOutputLengthError"`
+
 - `data`: object
 
 **MessageAbortedError** — `name: "MessageAbortedError"`
+
 - `data`: `{ message: string }`
 
 **StructuredOutputError** — `name: "StructuredOutputError"`
+
 - `data`: `{ message: string, retries: number }`
 
 **ContextOverflowError** — `name: "ContextOverflowError"`
+
 - `data`: `{ message: string, responseBody?: string }`
 
 ### APIError

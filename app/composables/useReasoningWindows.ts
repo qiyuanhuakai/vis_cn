@@ -1,5 +1,10 @@
 import { onUnmounted, reactive, type Component, type Ref } from 'vue';
-import type { MessagePart, MessagePartDeltaPacket, MessagePartUpdatedPacket, MessageUpdatedPacket } from '../types/sse';
+import type {
+  MessagePart,
+  MessagePartDeltaPacket,
+  MessagePartUpdatedPacket,
+  MessageUpdatedPacket,
+} from '../types/sse';
 import type { SessionScope } from './useGlobalEvents';
 import type { useFloatingWindows } from './useFloatingWindows';
 import { useDeltaAccumulator } from './useDeltaAccumulator';
@@ -29,7 +34,15 @@ const REASONING_WINDOW_PREFIX = 'reasoning:';
 const REASONING_WINDOW_COLOR = '#8b5cf6';
 
 export function useReasoningWindows(options: UseReasoningWindowsOptions) {
-  const { selectedSessionId, fw, reasoningComponent, theme, reasoningCloseDelayMs, resolveModelName, suppressAutoWindows } = options;
+  const {
+    selectedSessionId,
+    fw,
+    reasoningComponent,
+    theme,
+    reasoningCloseDelayMs,
+    resolveModelName,
+    suppressAutoWindows,
+  } = options;
   let boundScope = options.scope;
   const acc = useDeltaAccumulator();
 
@@ -167,8 +180,12 @@ export function useReasoningWindows(options: UseReasoningWindowsOptions) {
       modelLabel = displayName || messageInfo.modelID;
     }
     const titleTag = modelLabel
-      ? isSubagent ? `[subagent: ${modelLabel}]` : `[${modelLabel}]`
-      : isSubagent ? '[subagent]' : undefined;
+      ? isSubagent
+        ? `[subagent: ${modelLabel}]`
+        : `[${modelLabel}]`
+      : isSubagent
+        ? '[subagent]'
+        : undefined;
     const title = titleTag ? `🤔 ${titleTag} Thinking...` : '🤔 Thinking...';
 
     if (!suppressAutoWindows?.value) {

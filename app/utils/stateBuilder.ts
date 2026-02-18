@@ -208,7 +208,10 @@ export function createStateBuilder() {
     sandbox.rootSessions = roots;
   }
 
-  function findSessionEntry(sessionId: string, preferredProjectId?: string): SessionEntry | undefined {
+  function findSessionEntry(
+    sessionId: string,
+    preferredProjectId?: string,
+  ): SessionEntry | undefined {
     if (!sessionId) return undefined;
     const preferred = preferredProjectId?.trim();
     if (preferred) {
@@ -330,7 +333,11 @@ export function createStateBuilder() {
     updateRootSessionOrder(target);
   }
 
-  function moveRootDescendantsToRootSandbox(projectId: string, rootSessionId: string, rootDirectory: string) {
+  function moveRootDescendantsToRootSandbox(
+    projectId: string,
+    rootSessionId: string,
+    rootDirectory: string,
+  ) {
     const descendantIds = collectDescendantIds(projectId, rootSessionId);
     descendantIds.forEach((sessionId) => {
       moveSessionWithinProject(projectId, sessionId, rootDirectory);
@@ -346,7 +353,11 @@ export function createStateBuilder() {
         Object.values(sandbox.sessions).forEach((session) => {
           if (!session.parentID) return;
           if (session.status === 'busy' || session.status === 'retry') return;
-          const seenAt = ephemeralLastSeenAt.get(session.id) ?? session.timeUpdated ?? session.timeCreated ?? now;
+          const seenAt =
+            ephemeralLastSeenAt.get(session.id) ??
+            session.timeUpdated ??
+            session.timeCreated ??
+            now;
           const activeAt = ephemeralLastActiveAt.get(session.id) ?? seenAt;
           if (now - activeAt < CHILD_SESSION_PRUNE_TTL_MS) return;
           stale.push({ sessionId: session.id, projectId });
@@ -359,34 +370,19 @@ export function createStateBuilder() {
     });
   }
 
-  function upsertSession(
-    info: SessionMutationInfo,
-    options: {
-      projectIdHint?: string;
-      directoryHint?: string;
-    } = {},
-  ): string | null {
+  function upsertSession(info: SessionMutationInfo): string | null {
     if (!info?.id) return null;
-    const existing = findSessionEntry(info.id, info.projectID || options.projectIdHint);
-    const resolvedProjectId =
-      info.projectID?.trim() ||
-      options.projectIdHint?.trim() ||
-      existing?.projectId ||
-      resolveProjectIdForDirectory(info.directory) ||
-      resolveProjectIdForDirectory(options.directoryHint);
+    const existing = findSessionEntry(info.id);
+    const resolvedProjectId = resolveProjectIdForDirectory(info.directory);
     if (!resolvedProjectId) return null;
 
-    const project = ensureProject(
-      resolvedProjectId,
-      info.directory || options.directoryHint || existing?.directory || '/',
-    );
+    const project = ensureProject(resolvedProjectId, info.directory || existing?.directory || '/');
     const incomingParentId = info.parentID?.trim() || undefined;
     const previous = existing?.session;
     const parentID = incomingParentId ?? previous?.parentID;
 
     let targetDirectory =
       normalizeDirectory(info.directory) ||
-      normalizeDirectory(options.directoryHint) ||
       normalizeDirectory(existing?.directory) ||
       normalizeDirectory(project.worktree) ||
       '/';
@@ -482,6 +478,40 @@ export function createStateBuilder() {
       changed = true;
     }
 
+    const nextIcon = project.icon
+      ? {
+          url: project.icon.url,
+          override: project.icon.override,
+          color: project.icon.color,
+        }
+      : undefined;
+    if (JSON.stringify(target.icon) !== JSON.stringify(nextIcon)) {
+      target.icon = nextIcon;
+      changed = true;
+    }
+
+    const nextCommands = project.commands
+      ? {
+          start: project.commands.start,
+        }
+      : undefined;
+    if (JSON.stringify(target.commands) !== JSON.stringify(nextCommands)) {
+      target.commands = nextCommands;
+      changed = true;
+    }
+
+    const nextTime = project.time
+      ? {
+          created: project.time.created,
+          updated: project.time.updated,
+          initialized: project.time.initialized,
+        }
+      : undefined;
+    if (JSON.stringify(target.time) !== JSON.stringify(nextTime)) {
+      target.time = nextTime;
+      changed = true;
+    }
+
     const hadRootSandbox = Boolean(target.sandboxes[worktree]);
     const rootSandbox = ensureSandbox(target, worktree);
     if (!hadRootSandbox) changed = true;
@@ -524,15 +554,10 @@ export function createStateBuilder() {
     });
   }
 
-  function applySessions(sessions: SessionInfo[], projectId: string, directory: string) {
+  function applySessions(sessions: SessionInfo[]) {
     const list = Array.isArray(sessions) ? sessions : [];
-    const projectIdHint = projectId?.trim() || resolveProjectIdForDirectory(directory) || undefined;
-    const directoryHint = normalizeDirectory(directory) || undefined;
     list.forEach((session) => {
-      upsertSession(session, {
-        projectIdHint,
-        directoryHint,
-      });
+      upsertSession(session);
     });
   }
 
@@ -568,19 +593,13 @@ export function createStateBuilder() {
   }
 
   function processSessionCreated(info: SessionInfo): string | null {
-    const changed = upsertSession(info, {
-      projectIdHint: info.projectID,
-      directoryHint: info.directory,
-    });
+    const changed = upsertSession(info);
     pruneEphemeralChildren();
     return changed;
   }
 
   function processSessionUpdated(info: SessionInfo): string | null {
-    const changed = upsertSession(info, {
-      projectIdHint: info.projectID,
-      directoryHint: info.directory,
-    });
+    const changed = upsertSession(info);
     pruneEphemeralChildren();
     return changed;
   }
@@ -591,7 +610,11 @@ export function createStateBuilder() {
     return changed;
   }
 
-  function processSessionStatus(sessionId: string, status: string, projectId?: string): string | null {
+  function processSessionStatus(
+    sessionId: string,
+    status: string,
+    projectId?: string,
+  ): string | null {
     if (!isSessionStatus(status)) return null;
     const entry = findSessionEntry(sessionId, projectId);
     if (!entry) return null;
@@ -625,11 +648,23 @@ export function createStateBuilder() {
     return project.id;
   }
 
+  function registerSandboxDirectory(projectId: string, directory: string): string | null {
+    const normalizedProjectId = projectId.trim();
+    const normalizedDirectory = normalizeDirectory(directory);
+    if (!normalizedProjectId || !normalizedDirectory) return null;
+    const project = state.projects[normalizedProjectId];
+    if (!project) return null;
+    if (project.sandboxes[normalizedDirectory]) {
+      projectIdByDirectory.set(normalizedDirectory, normalizedProjectId);
+      return null;
+    }
+    ensureSandbox(project, normalizedDirectory);
+    indexProjectDirectories(project);
+    return normalizedProjectId;
+  }
+
   function applySessionMutated(info: SessionMutationInfo): string | null {
-    const changed = upsertSession(info, {
-      projectIdHint: info.projectID,
-      directoryHint: info.directory,
-    });
+    const changed = upsertSession(info);
     pruneEphemeralChildren();
     return changed;
   }
@@ -648,12 +683,8 @@ export function createStateBuilder() {
     const builder = createStateBuilder();
     builder.applyProjects(projects);
 
-    sessionsByDir.forEach((sessions, directory) => {
-      const inferredProjectId =
-        sessions.find((session) => session.projectID)?.projectID ||
-        findProjectIdByDirectoryInInput(projects, directory) ||
-        '';
-      builder.applySessions(sessions, inferredProjectId, directory);
+    sessionsByDir.forEach((sessions) => {
+      builder.applySessions(sessions);
     });
 
     statusesByDir.forEach((statusMap, directory) => {
@@ -691,7 +722,9 @@ export function createStateBuilder() {
     return projectIds[0] ?? 'global';
   }
 
-  function findSessionProject(sessionId: string): { projectId: string; directory: string } | undefined {
+  function findSessionProject(
+    sessionId: string,
+  ): { projectId: string; directory: string } | undefined {
     if (!sessionId) return undefined;
     const direct = sessionLocationById.get(sessionId);
     if (direct) {
@@ -728,8 +761,10 @@ export function createStateBuilder() {
     processSessionStatus,
     processProjectUpdated,
     processVcsBranchUpdated,
+    registerSandboxDirectory,
     applySessionMutated,
     applySessionRemoved,
+    resolveProjectIdForDirectory,
     rebuild,
     getState,
     getProject,

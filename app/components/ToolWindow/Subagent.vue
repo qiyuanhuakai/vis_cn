@@ -6,12 +6,7 @@
       class="subagent-entry"
       :class="{ 'subagent-entry-separator': index > 0 }"
     >
-      <MessageViewer
-        :code="entry.text"
-        lang="markdown"
-        :theme="theme"
-        @rendered="handleRendered"
-      />
+      <MessageViewer :code="entry.text" lang="markdown" :theme="theme" @rendered="handleRendered" />
     </div>
   </div>
 </template>

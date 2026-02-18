@@ -347,7 +347,8 @@ function getTime(id: string): number | undefined {
 function getCompletedTime(id: string): number | undefined {
   const info = get(id);
   if (!info) return undefined;
-  if (info.role === 'assistant') return asNumber(info.time.completed) ?? asNumber(info.time.created);
+  if (info.role === 'assistant')
+    return asNumber(info.time.completed) ?? asNumber(info.time.created);
   return asNumber(info.time.created);
 }
 

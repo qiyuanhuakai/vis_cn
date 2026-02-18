@@ -49,7 +49,11 @@
           :aria-label="isExpanded(row.node.path) ? 'Collapse directory' : 'Expand directory'"
           @click.stop="emit('toggle-dir', row.node.path)"
         >
-          <Icon :icon="isExpanded(row.node.path) ? 'lucide:chevron-down' : 'lucide:chevron-right'" :width="14" :height="14" />
+          <Icon
+            :icon="isExpanded(row.node.path) ? 'lucide:chevron-down' : 'lucide:chevron-right'"
+            :width="14"
+            :height="14"
+          />
         </button>
         <span v-else class="tree-toggle tree-toggle-spacer"></span>
         <span class="tree-icon">{{ row.node.type === 'directory' ? '📁' : '📄' }}</span>

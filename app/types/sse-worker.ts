@@ -1,4 +1,4 @@
-import type { SsePacket } from './sse';
+import type { ProjectInfo, SsePacket } from './sse';
 import type { ProjectState } from './worker-state';
 
 export type TabToWorkerMessage =
@@ -30,6 +30,15 @@ export type TabToWorkerMessage =
       type: 'session.removed';
       sessionId: string;
       projectId?: string;
+    }
+  | {
+      type: 'project.mutated';
+      info: ProjectInfo;
+    }
+  | {
+      type: 'selection.active';
+      projectId: string;
+      sessionId: string;
     };
 
 export type WorkerToTabMessage =
@@ -65,4 +74,9 @@ export type WorkerToTabMessage =
   | {
       type: 'state.notifications-updated';
       notifications: Record<string, string[]>;
+    }
+  | {
+      type: 'notification.show';
+      sessionId: string;
+      kind: 'permission' | 'question' | 'idle';
     };

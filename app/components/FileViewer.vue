@@ -14,11 +14,7 @@
     </div>
     <div class="viewer-body">
       <div v-if="showLoading" class="viewer-loading">Loading…</div>
-      <CodeContent
-        v-else
-        :html="renderedHtml || rawHtml || ''"
-        :variant="viewerVariant"
-      />
+      <CodeContent v-else :html="renderedHtml || rawHtml || ''" :variant="viewerVariant" />
     </div>
   </div>
 </template>

@@ -205,7 +205,6 @@ function statusIcon(status: string) {
   color: #dbeafe;
 }
 
-
 .todo-status {
   width: 14px;
   text-align: center;
@@ -264,5 +263,4 @@ function statusIcon(status: string) {
   width: 100%;
   border-right: 0;
 }
-
 </style>

@@ -80,148 +80,173 @@
         </div>
       </div>
       <div class="input-toolbar">
-      <div class="input-selects">
-        <div class="input-field compact">
-          <Dropdown
-            v-model="modeValue"
-            :placeholder="hasAgentOptions ? 'Select agent' : 'Loading agents...'"
-            :disabled="props.disabled || !hasAgentOptions"
-            button-class="input-control input-dropdown-button"
-            popup-class="input-dropdown-popup"
-            auto-close
-            title="Agent (Tab)"
-            @update:open="handleModelDropdownOpenChange"
-          >
-            <template #value="{ value: id }">
-              <span :style="agentValueStyle(id)">{{ findAgent(id)?.label }}</span>
-            </template>
-            <template #default>
-              <div class="dropdown-list">
-                <div v-if="!hasAgentOptions" class="dropdown-empty">Loading agents...</div>
-                <DropdownItem v-for="agent in agentOptions" :key="agent.id" :value="agent.id">
-                  <div class="agent-dropdown-item">
-                    <span class="agent-dropdown-name" :style="agentOptionNameStyle(agent)">
-                      {{ agent.label }}
-                    </span>
-                    <span v-if="agent.description" class="agent-dropdown-description">
-                      {{ agent.description }}
-                    </span>
-                  </div>
-                </DropdownItem>
-              </div>
-            </template>
-          </Dropdown>
-        </div>
-        <div class="input-field compact">
-          <div ref="modelDropdownRef" class="input-dropdown-root">
+        <div class="input-selects">
+          <div class="input-field compact">
             <Dropdown
-              v-model="modelValue"
-              :placeholder="hasModelOptions ? 'Select model' : 'Loading models...'"
-              :disabled="props.disabled || !hasModelOptions"
+              v-model="modeValue"
+              :placeholder="hasAgentOptions ? 'Select agent' : 'Loading agents...'"
+              :disabled="props.disabled || !hasAgentOptions"
               button-class="input-control input-dropdown-button"
               popup-class="input-dropdown-popup"
               auto-close
-              title="Model (Ctrl-M)"
+              title="Agent (Tab)"
               @update:open="handleModelDropdownOpenChange"
             >
               <template #value="{ value: id }">
-                <div class="model-button-label">
-                  <span v-if="findModelOption(id)?.providerLabel ?? findModelOption(id)?.providerID" class="model-button-provider">{{ findModelOption(id)?.providerLabel ?? findModelOption(id)?.providerID }}</span>
-                  <span class="model-button-name">{{ findModelOption(id)?.displayName }}</span>
-                </div>
+                <span :style="agentValueStyle(id)">{{ findAgent(id)?.label }}</span>
               </template>
               <template #default>
-                <div class="model-picker">
-                  <DropdownSearch
-                    v-model="modelSearchQuery"
-                    placeholder="Search..."
-                    class="model-search"
-                  />
-                  <div class="model-picker-list">
-                    <div class="dropdown-list">
-                      <div v-if="!hasModelOptions" class="dropdown-empty">Loading models...</div>
-                      <div v-else-if="filteredGroupedModelOptions.length === 0" class="dropdown-empty">No matching models</div>
-                      <template v-for="group in filteredGroupedModelOptions" :key="group.providerID">
-                        <div class="input-dropdown-group-label">{{ group.label }}</div>
-                        <DropdownItem v-for="model in group.models" :key="model.id" :value="model.id">
-                          <div class="model-dropdown-item">
-                            <span class="model-dropdown-name">{{ model.displayName }}</span>
-                            <span class="model-dropdown-path"
-                              >{{ model.providerID }}/{{ model.modelID }}</span
-                            >
-                          </div>
-                        </DropdownItem>
-                      </template>
+                <div class="dropdown-list">
+                  <div v-if="!hasAgentOptions" class="dropdown-empty">Loading agents...</div>
+                  <DropdownItem v-for="agent in agentOptions" :key="agent.id" :value="agent.id">
+                    <div class="agent-dropdown-item">
+                      <span class="agent-dropdown-name" :style="agentOptionNameStyle(agent)">
+                        {{ agent.label }}
+                      </span>
+                      <span v-if="agent.description" class="agent-dropdown-description">
+                        {{ agent.description }}
+                      </span>
+                    </div>
+                  </DropdownItem>
+                </div>
+              </template>
+            </Dropdown>
+          </div>
+          <div class="input-field compact">
+            <div ref="modelDropdownRef" class="input-dropdown-root">
+              <Dropdown
+                v-model="modelValue"
+                :placeholder="hasModelOptions ? 'Select model' : 'Loading models...'"
+                :disabled="props.disabled || !hasModelOptions"
+                button-class="input-control input-dropdown-button"
+                popup-class="input-dropdown-popup"
+                auto-close
+                title="Model (Ctrl-M)"
+                @update:open="handleModelDropdownOpenChange"
+              >
+                <template #value="{ value: id }">
+                  <div class="model-button-label">
+                    <span
+                      v-if="findModelOption(id)?.providerLabel ?? findModelOption(id)?.providerID"
+                      class="model-button-provider"
+                      >{{
+                        findModelOption(id)?.providerLabel ?? findModelOption(id)?.providerID
+                      }}</span
+                    >
+                    <span class="model-button-name">{{ findModelOption(id)?.displayName }}</span>
+                  </div>
+                </template>
+                <template #default>
+                  <div class="model-picker">
+                    <DropdownSearch
+                      v-model="modelSearchQuery"
+                      placeholder="Search..."
+                      class="model-search"
+                    />
+                    <div class="model-picker-list">
+                      <div class="dropdown-list">
+                        <div v-if="!hasModelOptions" class="dropdown-empty">Loading models...</div>
+                        <div
+                          v-else-if="filteredGroupedModelOptions.length === 0"
+                          class="dropdown-empty"
+                        >
+                          No matching models
+                        </div>
+                        <template
+                          v-for="group in filteredGroupedModelOptions"
+                          :key="group.providerID"
+                        >
+                          <div class="input-dropdown-group-label">{{ group.label }}</div>
+                          <DropdownItem
+                            v-for="model in group.models"
+                            :key="model.id"
+                            :value="model.id"
+                          >
+                            <div class="model-dropdown-item">
+                              <span class="model-dropdown-name">{{ model.displayName }}</span>
+                              <span class="model-dropdown-path"
+                                >{{ model.providerID }}/{{ model.modelID }}</span
+                              >
+                            </div>
+                          </DropdownItem>
+                        </template>
+                      </div>
                     </div>
                   </div>
+                </template>
+              </Dropdown>
+            </div>
+          </div>
+          <div class="input-field compact">
+            <Dropdown
+              v-model="thinkingKeyValue"
+              :placeholder="hasThinkingOptions ? 'Select variant' : 'Loading...'"
+              :disabled="props.disabled || !hasThinkingOptions"
+              button-class="input-control input-dropdown-button"
+              popup-class="input-dropdown-popup"
+              auto-close
+              title="Variant (Ctrl-, / Ctrl-.)"
+              @update:open="handleModelDropdownOpenChange"
+            >
+              <template #value="{ value: key }">{{ findThinkingChoice(key)?.label }}</template>
+              <template #default>
+                <div class="dropdown-list">
+                  <div v-if="!hasThinkingOptions" class="dropdown-empty">Loading...</div>
+                  <DropdownItem
+                    v-for="option in thinkingChoices"
+                    :key="option.key"
+                    :value="option.key"
+                  >
+                    <span class="dropdown-item-label">{{ option.label }}</span>
+                  </DropdownItem>
                 </div>
               </template>
             </Dropdown>
           </div>
         </div>
-        <div class="input-field compact">
-           <Dropdown
-            v-model="thinkingKeyValue"
-            :placeholder="hasThinkingOptions ? 'Select variant' : 'Loading...'"
-             :disabled="props.disabled || !hasThinkingOptions"
-             button-class="input-control input-dropdown-button"
-             popup-class="input-dropdown-popup"
-             auto-close
-             title="Variant (Ctrl-, / Ctrl-.)"
-             @update:open="handleModelDropdownOpenChange"
-           >
-            <template #value="{ value: key }">{{ findThinkingChoice(key)?.label }}</template>
-            <template #default>
-              <div class="dropdown-list">
-                <div v-if="!hasThinkingOptions" class="dropdown-empty">Loading...</div>
-                <DropdownItem v-for="option in thinkingChoices" :key="option.key" :value="option.key">
-                  <span class="dropdown-item-label">{{ option.label }}</span>
-                </DropdownItem>
-              </div>
-            </template>
-          </Dropdown>
-        </div>
-
+        <button
+          type="button"
+          class="input-button suppress-button"
+          :class="{ active: suppressAutoWindows }"
+          :title="suppressAutoWindows ? 'Auto windows suppressed' : 'Suppress auto windows'"
+          @click="suppressAutoWindows = !suppressAutoWindows"
+        >
+          <Icon
+            :icon="suppressAutoWindows ? 'lucide:eye-off' : 'lucide:eye'"
+            :width="16"
+            :height="16"
+          />
+        </button>
+        <button
+          type="button"
+          class="input-button attach-button"
+          :disabled="props.disabled || props.canAttach === false"
+          title="Attach"
+          @click="triggerFileInput"
+        >
+          <Icon icon="lucide:paperclip" :width="16" :height="16" />
+        </button>
+        <button
+          v-if="isThinking"
+          type="button"
+          class="input-button stop send-button"
+          :disabled="props.disabled || !canAbort"
+          title="Stop (ESC x2)"
+          @click="$emit('abort')"
+        >
+          <Icon icon="ph:stop-fill" :width="16" :height="16" />
+        </button>
+        <button
+          v-else
+          type="button"
+          class="input-button primary send-button"
+          :disabled="props.disabled || !canSend"
+          :title="sendTooltip"
+          @click="$emit('send')"
+        >
+          <Icon icon="lucide:send" :width="16" :height="16" />
+        </button>
       </div>
-      <button
-        type="button"
-        class="input-button suppress-button"
-        :class="{ active: suppressAutoWindows }"
-        :title="suppressAutoWindows ? 'Auto windows suppressed' : 'Suppress auto windows'"
-        @click="suppressAutoWindows = !suppressAutoWindows"
-      >
-        <Icon :icon="suppressAutoWindows ? 'lucide:eye-off' : 'lucide:eye'" :width="16" :height="16" />
-      </button>
-      <button
-        type="button"
-        class="input-button attach-button"
-        :disabled="props.disabled || props.canAttach === false"
-        title="Attach"
-        @click="triggerFileInput"
-      >
-        <Icon icon="lucide:paperclip" :width="16" :height="16" />
-      </button>
-      <button
-        v-if="isThinking"
-        type="button"
-        class="input-button stop send-button"
-        :disabled="props.disabled || !canAbort"
-        title="Stop (ESC x2)"
-        @click="$emit('abort')"
-      >
-        <Icon icon="ph:stop-fill" :width="16" :height="16" />
-      </button>
-      <button
-        v-else
-        type="button"
-        class="input-button primary send-button"
-        :disabled="props.disabled || !canSend"
-        :title="sendTooltip"
-        @click="$emit('send')"
-      >
-        <Icon icon="lucide:send" :width="16" :height="16" />
-      </button>
-    </div>
     </div>
   </div>
 </template>
@@ -332,8 +357,6 @@ watch(historyOpen, (open) => {
   }
 });
 
-
-
 const sendTooltip = computed(() =>
   enterToSend.value ? 'Ctrl-Enter / Enter to send' : 'Ctrl-Enter to send',
 );
@@ -358,13 +381,16 @@ const commandMatches = computed(() => {
 
 const commandPopupOpen = computed(() => commandMatches.value.length > 0);
 
-watch(() => props.disabled, (disabled, prev) => {
-  if (prev && !disabled) {
-    nextTick(() => {
-      textareaRef.value?.focus();
-    });
-  }
-});
+watch(
+  () => props.disabled,
+  (disabled, prev) => {
+    if (prev && !disabled) {
+      nextTick(() => {
+        textareaRef.value?.focus();
+      });
+    }
+  },
+);
 
 watch(slashQuery, () => {
   activeCommandIndex.value = 0;
@@ -513,7 +539,10 @@ function handleKeydown(event: KeyboardEvent) {
   // --- Input history: open dropdown when ArrowUp on empty input ---
   if (
     event.key === 'ArrowUp' &&
-    !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey &&
     messageValue.value === '' &&
     userHistory.value.length > 0
   ) {
@@ -804,8 +833,6 @@ const inputMessageStyle = computed(() => {
   height: 28px;
 }
 
-
-
 .input-dropdown-root {
   width: 100%;
 }
@@ -833,7 +860,10 @@ const inputMessageStyle = computed(() => {
   font-family: inherit;
   outline: none;
   box-sizing: border-box;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 
 :deep(.input-control):hover:not(:disabled) {
@@ -1207,7 +1237,9 @@ const inputMessageStyle = computed(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .input-button:hover:not(:disabled) {

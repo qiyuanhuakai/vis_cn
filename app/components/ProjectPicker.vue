@@ -1,5 +1,11 @@
 <template>
-  <dialog ref="dialogRef" class="modal-backdrop" @close="$emit('close')" @cancel.prevent @click.self="dialogRef?.close()">
+  <dialog
+    ref="dialogRef"
+    class="modal-backdrop"
+    @close="$emit('close')"
+    @cancel.prevent
+    @click.self="dialogRef?.close()"
+  >
     <div class="modal">
       <Dropdown
         ref="dropdownRef"
@@ -36,11 +42,7 @@
         </template>
 
         <DropdownItem v-if="!isAtRoot" value="..">../</DropdownItem>
-        <DropdownItem
-          v-for="item in suggestions"
-          :key="item.name"
-          :value="item.name"
-        >
+        <DropdownItem v-for="item in suggestions" :key="item.name" :value="item.name">
           {{ item.name }}/
         </DropdownItem>
         <div v-if="!isLoading && suggestions.length === 0 && currentDir" class="picker-empty">
@@ -69,7 +71,6 @@ type FileNode = {
 
 const props = defineProps<{
   open: boolean;
-  baseUrl: string;
   homePath?: string;
 }>();
 
@@ -202,10 +203,13 @@ async function fetchDirectory(dir: string) {
   try {
     const cleanDir = dir.replace(/\/+$/, '') || '/';
     const { directory, path } = splitFileContentDirectoryAndPath(cleanDir, null);
-    const data = await opencodeApi.listFiles(props.baseUrl, {
-      directory,
-      path,
-    }, { signal: controller.signal }) as FileNode[];
+    const data = (await opencodeApi.listFiles(
+      {
+        directory,
+        path,
+      },
+      { signal: controller.signal },
+    )) as FileNode[];
     if (requestId !== fetchRequestId) return;
     allEntries.value = Array.isArray(data) ? data : [];
   } catch (err) {

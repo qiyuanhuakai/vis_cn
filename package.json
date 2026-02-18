@@ -10,7 +10,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "format": "oxfmt",
-    "lint": "oxlint",
+    "lint": "oxlint && vue-tsc --noEmit",
     "dev": "vite dev",
     "build": "vite build",
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -8,7 +8,7 @@
 // ── SSE envelope ──────────────────────────────────────────────────────────
 
 /** Outer structure of every SSE data frame from the server. */
-export type SseEnvelope = {
+export type SsePacket = {
   directory: string;
   payload: {
     type: string;
@@ -57,11 +57,7 @@ export type ToolStateError = {
   time: { start: number; end: number };
 };
 
-export type ToolState =
-  | ToolStatePending
-  | ToolStateRunning
-  | ToolStateCompleted
-  | ToolStateError;
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError;
 
 /** FilePartSource discriminated union (type). */
 export type FileSourceText = {
@@ -424,7 +420,13 @@ export type MessagePart =
 export type MessageUpdatedPacket = { info: MessageInfo };
 export type MessageRemovedPacket = { sessionID: string; messageID: string };
 export type MessagePartUpdatedPacket = { part: MessagePart; delta?: string };
-export type MessagePartDeltaPacket = { sessionID: string; messageID: string; partID: string; field: string; delta: string };
+export type MessagePartDeltaPacket = {
+  sessionID: string;
+  messageID: string;
+  partID: string;
+  field: string;
+  delta: string;
+};
 export type MessagePartRemovedPacket = { sessionID: string; messageID: string; partID: string };
 
 // session events
@@ -438,7 +440,11 @@ export type SessionCompactedPacket = { sessionID: string };
 
 // permission events
 export type PermissionAskedPacket = PermissionNextRequest;
-export type PermissionRepliedPacket = { sessionID: string; requestID: string; reply: 'once' | 'always' | 'reject' };
+export type PermissionRepliedPacket = {
+  sessionID: string;
+  requestID: string;
+  reply: 'once' | 'always' | 'reject';
+};
 
 // question events
 export type QuestionAskedPacket = QuestionRequest;
@@ -466,7 +472,12 @@ export type VcsBranchUpdatedPacket = { branch?: string };
 export type FileEditedPacket = { file: string };
 export type LspUpdatedPacket = Record<string, never>;
 export type LspDiagnosticsPacket = { serverID: string; path: string };
-export type CommandExecutedPacket = { name: string; sessionID: string; arguments: string; messageID: string };
+export type CommandExecutedPacket = {
+  name: string;
+  sessionID: string;
+  arguments: string;
+  messageID: string;
+};
 export type InstallationUpdatedPacket = { version: string };
 export type InstallationUpdateAvailablePacket = { version: string };
 export type McpToolsChangedPacket = { server: string };

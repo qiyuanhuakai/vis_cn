@@ -3,14 +3,25 @@ type QueryValue = string | number | boolean | undefined;
 type JsonBody = Record<string, unknown> | Array<unknown>;
 type RequestOptions = {
   instanceDirectory?: string;
-  authorization?: string;
   signal?: AbortSignal;
 };
 
-let defaultAuthorization: string | undefined;
+let configuredBaseUrl = '';
+let configuredAuthorization: string | undefined;
 
-export function setDefaultAuthorization(auth: string | undefined) {
-  defaultAuthorization = auth;
+export function setBaseUrl(baseUrl: string) {
+  configuredBaseUrl = baseUrl.replace(/\/+$/, '');
+}
+
+export function setAuthorization(authorization: string | undefined) {
+  configuredAuthorization = authorization;
+}
+
+function getBaseUrlOrThrow() {
+  if (!configuredBaseUrl) {
+    throw new Error('OpenCode base URL is not configured.');
+  }
+  return configuredBaseUrl;
 }
 
 function buildQuery(params?: Record<string, QueryValue>) {
@@ -24,8 +35,8 @@ function buildQuery(params?: Record<string, QueryValue>) {
   return query ? `?${query}` : '';
 }
 
-function createUrl(baseUrl: string, path: string, params?: Record<string, QueryValue>) {
-  return `${baseUrl}${path}${buildQuery(params)}`;
+function createUrl(path: string, params?: Record<string, QueryValue>) {
+  return `${getBaseUrlOrThrow()}${path}${buildQuery(params)}`;
 }
 
 async function parseJson(response: Response) {
@@ -46,18 +57,16 @@ function buildHeaders(options?: RequestOptions, contentType?: string) {
   const headers: Record<string, string> = {};
   if (contentType) headers['Content-Type'] = contentType;
   if (options?.instanceDirectory) headers['x-opencode-directory'] = options.instanceDirectory;
-  const auth = options?.authorization ?? defaultAuthorization;
-  if (auth) headers['Authorization'] = auth;
+  if (configuredAuthorization) headers['Authorization'] = configuredAuthorization;
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
 async function getJson(
-  baseUrl: string,
   path: string,
   params?: Record<string, QueryValue>,
   options?: RequestOptions,
 ) {
-  const response = await fetch(createUrl(baseUrl, path, params), {
+  const response = await fetch(createUrl(path, params), {
     headers: buildHeaders(options),
     signal: options?.signal,
   });
@@ -66,12 +75,11 @@ async function getJson(
 }
 
 async function sendJson(
-  baseUrl: string,
   path: string,
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   options: { params?: Record<string, QueryValue>; body?: JsonBody; request?: RequestOptions },
 ) {
-  const response = await fetch(createUrl(baseUrl, path, options.params), {
+  const response = await fetch(createUrl(path, options.params), {
     method,
     headers: buildHeaders(options.request, 'application/json'),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -81,16 +89,15 @@ async function sendJson(
 }
 
 export function createWsUrl(
-  baseUrl: string,
   path: string,
   params?: Record<string, QueryValue>,
   credentials?: { username: string; password: string },
 ) {
-  const wsBase = baseUrl.replace(/^http/, 'ws');
-  const url = createUrl(wsBase, path, params);
-  
+  const wsBase = getBaseUrlOrThrow().replace(/^http/, 'ws');
+  const url = `${wsBase}${path}${buildQuery(params)}`;
+
   if (!credentials) return url;
-  
+
   const urlObj = new URL(url);
   if (credentials.username || credentials.password) {
     urlObj.username = credentials.username;
@@ -99,43 +106,50 @@ export function createWsUrl(
   return urlObj.toString();
 }
 
-export function getPathInfo(baseUrl: string, options?: RequestOptions) {
-  return getJson(baseUrl, '/path', undefined, options) as Promise<Record<string, string>>;
+export function getPathInfo(options?: RequestOptions) {
+  return getJson('/path', undefined, options) as Promise<Record<string, string>>;
 }
 
-export function listFiles(baseUrl: string, payload: { directory: string; path?: string }, options?: RequestOptions) {
-  return getJson(baseUrl, '/file', {
-    directory: payload.directory,
-    path: payload.path,
-  }, options) as Promise<unknown>;
+export function listFiles(payload: { directory: string; path?: string }, options?: RequestOptions) {
+  return getJson(
+    '/file',
+    {
+      directory: payload.directory,
+      path: payload.path,
+    },
+    options,
+  ) as Promise<unknown>;
 }
 
-export function readFileContent(baseUrl: string, payload: { directory: string; path: string }, options?: RequestOptions) {
-  return getJson(baseUrl, '/file/content', {
-    directory: payload.directory,
-    path: payload.path,
-  }, options) as Promise<unknown>;
-}
-
-export function getSessionDiff(
-  baseUrl: string,
-  payload: { sessionID: string; directory?: string },
+export function readFileContent(
+  payload: { directory: string; path: string },
+  options?: RequestOptions,
 ) {
-  return getJson(baseUrl, `/session/${payload.sessionID}/diff`, {
+  return getJson(
+    '/file/content',
+    {
+      directory: payload.directory,
+      path: payload.path,
+    },
+    options,
+  ) as Promise<unknown>;
+}
+
+export function getSessionDiff(payload: { sessionID: string; directory?: string }) {
+  return getJson(`/session/${payload.sessionID}/diff`, {
     directory: payload.directory,
   }) as Promise<unknown>;
 }
 
-export function listProjects(baseUrl: string, directory?: string) {
-  return getJson(baseUrl, '/project', { directory }) as Promise<unknown>;
+export function listProjects(directory?: string) {
+  return getJson('/project', { directory }) as Promise<unknown>;
 }
 
-export function getCurrentProject(baseUrl: string, directory?: string) {
-  return getJson(baseUrl, '/project/current', { directory }) as Promise<unknown>;
+export function getCurrentProject(directory?: string) {
+  return getJson('/project/current', { directory }) as Promise<unknown>;
 }
 
 export function listSessions(
-  baseUrl: string,
   options: {
     directory?: string;
     roots?: boolean;
@@ -144,162 +158,155 @@ export function listSessions(
     instanceDirectory?: string;
   } = {},
 ) {
-  return getJson(baseUrl, '/session', {
-    directory: options.directory,
-    roots: options.roots ? 'true' : undefined,
-    search: options.search,
-    limit: options.limit,
-  }, {
-    instanceDirectory: options.instanceDirectory,
-  }) as Promise<unknown>;
+  return getJson(
+    '/session',
+    {
+      directory: options.directory,
+      roots: options.roots ? 'true' : undefined,
+      search: options.search,
+      limit: options.limit,
+    },
+    {
+      instanceDirectory: options.instanceDirectory,
+    },
+  ) as Promise<unknown>;
 }
 
 export function getSessionChildren(
-  baseUrl: string,
   sessionId: string,
   directory?: string,
   request?: RequestOptions,
 ) {
-  return getJson(baseUrl, `/session/${sessionId}/children`, {
-    directory,
-  }, request) as Promise<unknown>;
+  return getJson(
+    `/session/${sessionId}/children`,
+    {
+      directory,
+    },
+    request,
+  ) as Promise<unknown>;
 }
 
-export function listWorktrees(baseUrl: string, directory: string) {
-  return getJson(baseUrl, '/experimental/worktree', { directory }) as Promise<unknown>;
+export function listWorktrees(directory: string) {
+  return getJson('/experimental/worktree', { directory }) as Promise<unknown>;
 }
 
-export function getVcsInfo(baseUrl: string, directory: string) {
-  return getJson(baseUrl, '/vcs', { directory }) as Promise<unknown>;
+export function getVcsInfo(directory: string) {
+  return getJson('/vcs', { directory }) as Promise<unknown>;
 }
 
-export function createWorktree(baseUrl: string, directory: string) {
-  return sendJson(baseUrl, '/experimental/worktree', 'POST', {
+export function createWorktree(directory: string) {
+  return sendJson('/experimental/worktree', 'POST', {
     params: { directory },
     body: {},
   }) as Promise<unknown>;
 }
 
-export function deleteWorktree(baseUrl: string, directory: string, targetDirectory: string) {
-  return sendJson(baseUrl, '/experimental/worktree', 'DELETE', {
+export function deleteWorktree(directory: string, targetDirectory: string) {
+  return sendJson('/experimental/worktree', 'DELETE', {
     params: { directory },
     body: { directory: targetDirectory },
   }) as Promise<unknown>;
 }
 
-export function createSession(baseUrl: string, directory?: string) {
-  return sendJson(baseUrl, '/session', 'POST', {
+export function createSession(directory?: string) {
+  return sendJson('/session', 'POST', {
     params: { directory },
     body: {},
   }) as Promise<unknown>;
 }
 
-export async function deleteSession(baseUrl: string, sessionId: string, directory?: string, request?: RequestOptions) {
-  return sendJson(baseUrl, `/session/${sessionId}`, 'DELETE', {
+export async function deleteSession(
+  sessionId: string,
+  directory?: string,
+  request?: RequestOptions,
+) {
+  return sendJson(`/session/${sessionId}`, 'DELETE', {
     params: { directory },
     request,
   });
 }
 
 export function updateSession(
-  baseUrl: string,
   sessionId: string,
   payload: { title?: string; time?: { archived?: number } },
   directory?: string,
 ) {
-  return sendJson(baseUrl, `/session/${sessionId}`, 'PATCH', {
+  return sendJson(`/session/${sessionId}`, 'PATCH', {
     params: { directory },
     body: payload,
   }) as Promise<unknown>;
 }
 
-export function forkSession(
-  baseUrl: string,
-  sessionId: string,
-  messageId: string,
-  directory?: string,
-) {
-  return sendJson(baseUrl, `/session/${sessionId}/fork`, 'POST', {
+export function forkSession(sessionId: string, messageId: string, directory?: string) {
+  return sendJson(`/session/${sessionId}/fork`, 'POST', {
     params: { directory },
     body: { messageID: messageId },
   }) as Promise<unknown>;
 }
 
-export function revertSession(
-  baseUrl: string,
-  sessionId: string,
-  messageId: string,
-  directory?: string,
-) {
-  return sendJson(baseUrl, `/session/${sessionId}/revert`, 'POST', {
+export function revertSession(sessionId: string, messageId: string, directory?: string) {
+  return sendJson(`/session/${sessionId}/revert`, 'POST', {
     params: { directory },
     body: { messageID: messageId },
   }) as Promise<unknown>;
 }
 
-export function listProviders(baseUrl: string) {
-  return getJson(baseUrl, '/config/providers') as Promise<unknown>;
+export function listProviders() {
+  return getJson('/config/providers') as Promise<unknown>;
 }
 
-export function listAgents(baseUrl: string) {
-  return getJson(baseUrl, '/agent') as Promise<unknown>;
+export function listAgents() {
+  return getJson('/agent') as Promise<unknown>;
 }
 
-export function listCommands(baseUrl: string, directory?: string) {
-  return getJson(baseUrl, '/command', { directory }) as Promise<unknown>;
+export function listCommands(directory?: string) {
+  return getJson('/command', { directory }) as Promise<unknown>;
 }
 
-export function getSessionStatusMap(
-  baseUrl: string,
-  directory?: string,
-  request?: RequestOptions,
-) {
-  return getJson(baseUrl, '/session/status', { directory }, request) as Promise<unknown>;
+export function getSessionStatusMap(directory?: string, request?: RequestOptions) {
+  return getJson('/session/status', { directory }, request) as Promise<unknown>;
 }
 
-export function listPendingPermissions(baseUrl: string, directory?: string) {
-  return getJson(baseUrl, '/permission', { directory }) as Promise<unknown>;
+export function listPendingPermissions(directory?: string) {
+  return getJson('/permission', { directory }) as Promise<unknown>;
 }
 
-export function listPendingQuestions(baseUrl: string, directory?: string) {
-  return getJson(baseUrl, '/question', { directory }) as Promise<unknown>;
+export function listPendingQuestions(directory?: string) {
+  return getJson('/question', { directory }) as Promise<unknown>;
 }
 
 export function listSessionMessages(
-  baseUrl: string,
   sessionId: string,
   options: { directory?: string; limit?: number } = {},
 ) {
-  return getJson(baseUrl, `/session/${sessionId}/message`, {
+  return getJson(`/session/${sessionId}/message`, {
     directory: options.directory,
     limit: options.limit,
   }) as Promise<unknown>;
 }
 
-export function getSessionMessage(
-  baseUrl: string,
-  sessionId: string,
-  messageId: string,
-  directory?: string,
-) {
-  return getJson(baseUrl, `/session/${sessionId}/message/${messageId}`, {
+export function getSessionMessage(sessionId: string, messageId: string, directory?: string) {
+  return getJson(`/session/${sessionId}/message/${messageId}`, {
     directory,
   }) as Promise<unknown>;
 }
 
-export function getSessionTodos(baseUrl: string, sessionId: string, directory?: string) {
-  return getJson(baseUrl, `/session/${sessionId}/todo`, { directory }) as Promise<unknown>;
+export function getSessionTodos(sessionId: string, directory?: string) {
+  return getJson(`/session/${sessionId}/todo`, { directory }) as Promise<unknown>;
 }
 
-export function listPtys(baseUrl: string, directory?: string) {
-  return getJson(baseUrl, '/pty', { directory }) as Promise<unknown>;
+export function listPtys(directory?: string) {
+  return getJson('/pty', { directory }) as Promise<unknown>;
 }
 
-export function createPty(
-  baseUrl: string,
-  payload: { directory?: string; cwd?: string; command?: string; args?: string[]; title?: string },
-) {
-  return sendJson(baseUrl, '/pty', 'POST', {
+export function createPty(payload: {
+  directory?: string;
+  cwd?: string;
+  command?: string;
+  args?: string[];
+  title?: string;
+}) {
+  return sendJson('/pty', 'POST', {
     params: { directory: payload.directory },
     body: {
       command: payload.command,
@@ -311,24 +318,22 @@ export function createPty(
 }
 
 export function updatePtySize(
-  baseUrl: string,
   ptyId: string,
   payload: { directory?: string; rows: number; cols: number },
 ) {
-  return sendJson(baseUrl, `/pty/${ptyId}`, 'PUT', {
+  return sendJson(`/pty/${ptyId}`, 'PUT', {
     params: { directory: payload.directory },
     body: { size: { rows: payload.rows, cols: payload.cols } },
   }) as Promise<unknown>;
 }
 
-export function deletePty(baseUrl: string, ptyId: string, directory?: string) {
-  return sendJson(baseUrl, `/pty/${ptyId}`, 'DELETE', {
+export function deletePty(ptyId: string, directory?: string) {
+  return sendJson(`/pty/${ptyId}`, 'DELETE', {
     params: { directory },
   }) as Promise<unknown>;
 }
 
 export async function sendCommand(
-  baseUrl: string,
   sessionId: string,
   payload: {
     directory?: string;
@@ -339,14 +344,13 @@ export async function sendCommand(
     variant?: string;
   },
 ) {
-  await sendJson(baseUrl, `/session/${sessionId}/command`, 'POST', {
+  await sendJson(`/session/${sessionId}/command`, 'POST', {
     params: { directory: payload.directory },
     body: payload,
   });
 }
 
 export async function sendPromptAsync(
-  baseUrl: string,
   sessionId: string,
   payload: {
     directory: string;
@@ -356,7 +360,7 @@ export async function sendPromptAsync(
     parts: Array<Record<string, unknown>>;
   },
 ) {
-  await sendJson(baseUrl, `/session/${sessionId}/prompt_async`, 'POST', {
+  await sendJson(`/session/${sessionId}/prompt_async`, 'POST', {
     params: { directory: payload.directory },
     body: {
       agent: payload.agent,
@@ -367,42 +371,56 @@ export async function sendPromptAsync(
   });
 }
 
-export async function abortSession(baseUrl: string, sessionId: string, directory?: string) {
-  await sendJson(baseUrl, `/session/${sessionId}/abort`, 'POST', {
+export async function abortSession(sessionId: string, directory?: string) {
+  await sendJson(`/session/${sessionId}/abort`, 'POST', {
     params: { directory },
   });
 }
 
+export async function patchMessagePart(payload: {
+  sessionID: string;
+  messageID: string;
+  partID: string;
+  part: Record<string, unknown>;
+  directory?: string;
+}) {
+  return sendJson(
+    `/session/${payload.sessionID}/message/${payload.messageID}/part/${payload.partID}`,
+    'PATCH',
+    {
+      params: { directory: payload.directory },
+      body: payload.part,
+    },
+  ) as Promise<unknown>;
+}
+
 export async function replyPermission(
-  baseUrl: string,
   requestId: string,
   payload: { directory?: string; reply: string },
 ) {
-  await sendJson(baseUrl, `/permission/${requestId}/reply`, 'POST', {
+  await sendJson(`/permission/${requestId}/reply`, 'POST', {
     params: { directory: payload.directory },
     body: { reply: payload.reply },
   });
 }
 
 export async function replyQuestion(
-  baseUrl: string,
   requestId: string,
   payload: { directory?: string; answers: string[][] },
 ) {
-  await sendJson(baseUrl, `/question/${requestId}/reply`, 'POST', {
+  await sendJson(`/question/${requestId}/reply`, 'POST', {
     params: { directory: payload.directory },
     body: { answers: payload.answers },
   });
 }
 
-export async function rejectQuestion(baseUrl: string, requestId: string, directory?: string) {
-  await sendJson(baseUrl, `/question/${requestId}/reject`, 'POST', {
+export async function rejectQuestion(requestId: string, directory?: string) {
+  await sendJson(`/question/${requestId}/reject`, 'POST', {
     params: { directory },
   });
 }
 
 export function updateProject(
-  baseUrl: string,
   projectId: string,
   payload: {
     directory?: string;
@@ -411,7 +429,7 @@ export function updateProject(
     commands?: { start?: string };
   },
 ) {
-  return sendJson(baseUrl, `/project/${projectId}`, 'PATCH', {
+  return sendJson(`/project/${projectId}`, 'PATCH', {
     params: { directory: payload.directory },
     body: {
       name: payload.name,

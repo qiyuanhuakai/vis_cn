@@ -6,9 +6,7 @@
  * `resolveRoot` callback supplied at creation time.
  */
 
-export function createNotificationManager(
-  resolveRoot: (sessionId: string) => string,
-) {
+export function createNotificationManager(resolveRoot: (sessionId: string) => string) {
   // rootSessionId → Set<requestId>
   let state: Map<string, Set<string>> = new Map();
   // Insertion-ordered list of root session IDs (for badge ordering)

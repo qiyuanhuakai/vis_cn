@@ -56,10 +56,7 @@ function languageCandidates(lang: string) {
   return [trimmed, 'text'];
 }
 
-async function resolveLanguage(
-  highlighter: Highlighter,
-  lang: string,
-) {
+async function resolveLanguage(highlighter: Highlighter, lang: string) {
   const loaded =
     typeof highlighter.getLoadedLanguages === 'function' ? highlighter.getLoadedLanguages() : [];
   loaded.forEach((item) => loadedLanguageCache.add(item));
@@ -74,15 +71,13 @@ async function resolveLanguage(
 
 type LanguageLoader = () => Promise<{ default: unknown }>;
 
-async function tryLoadLanguage(
-  highlighter: Highlighter,
-  candidate: string,
-) {
+async function tryLoadLanguage(highlighter: Highlighter, candidate: string) {
   if (failedLanguageCache.has(candidate)) return false;
   if (typeof highlighter.loadLanguage !== 'function') return false;
 
-  const loader = (bundledLanguages as Record<string, unknown>)[candidate]
-    ?? (allBundledLanguages as Record<string, unknown>)[candidate];
+  const loader =
+    (bundledLanguages as Record<string, unknown>)[candidate] ??
+    (allBundledLanguages as Record<string, unknown>)[candidate];
   try {
     if (typeof loader === 'function') {
       const module = await (loader as LanguageLoader)();
@@ -103,7 +98,12 @@ async function tryLoadLanguage(
   }
 }
 
-function safeCodeToHtml(highlighter: Highlighter, code: string, lang: string, theme: string): string {
+function safeCodeToHtml(
+  highlighter: Highlighter,
+  code: string,
+  lang: string,
+  theme: string,
+): string {
   try {
     return highlighter.codeToHtml(code, { lang, theme });
   } catch {
@@ -800,9 +800,7 @@ function getMarkdownIt(highlighter: Highlighter, theme: string) {
         light: theme,
         dark: theme,
       },
-      transformers: [
-        transformerNotationDiff(),
-      ],
+      transformers: [transformerNotationDiff()],
       langAlias: {},
     };
     cachedMdShikiOptions = shikiOptions;
@@ -867,10 +865,7 @@ function renderRequest(request: RenderRequest): Promise<string> {
 
   // Markdown rendering for messages (gutterMode: 'none' only)
   const resolvedLang = languageCandidates(request.lang)[0] ?? 'text';
-  if (
-    (resolvedLang === 'markdown' || resolvedLang === 'md') &&
-    request.gutterMode === 'none'
-  ) {
+  if ((resolvedLang === 'markdown' || resolvedLang === 'md') && request.gutterMode === 'none') {
     return renderMarkdownHtml(request);
   }
 

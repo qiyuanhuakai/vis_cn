@@ -54,5 +54,3 @@ export type Message = {
   error?: { name: string; message: string } | null;
   classification?: 'real_user' | 'system_injection' | 'unknown';
 };
-
-

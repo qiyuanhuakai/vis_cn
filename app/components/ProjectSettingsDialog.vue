@@ -18,17 +18,16 @@
         <div class="field">
           <label class="field-label">Name</label>
           <div class="name-row">
-            <input
-              v-model="form.name"
-              type="text"
-              class="field-input"
-              :placeholder="defaultName"
-            />
+            <input v-model="form.name" type="text" class="field-input" :placeholder="defaultName" />
             <button
               type="button"
               class="sync-button"
               :disabled="!packageJsonName"
-              :title="packageJsonName ? `Sync from package.json: ${packageJsonName}` : 'Sync from package.json'"
+              :title="
+                packageJsonName
+                  ? `Sync from package.json: ${packageJsonName}`
+                  : 'Sync from package.json'
+              "
               @click="form.name = packageJsonName!"
             >
               <Icon icon="lucide:refresh-cw" :width="14" :height="14" />
@@ -128,7 +127,6 @@ const COLOR_HEX: Record<string, { text: string; bg: string }> = {
 
 const props = defineProps<{
   open: boolean;
-  baseUrl: string;
   projectId: string;
   worktree: string;
   name?: string;
@@ -139,13 +137,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'close'): void;
-  (event: 'save', payload: {
-    projectId: string;
-    worktree: string;
-    name: string;
-    icon: { color: string; override: string };
-    commands: { start: string };
-  }): void;
+  (
+    event: 'save',
+    payload: {
+      projectId: string;
+      worktree: string;
+      name: string;
+      icon: { color: string; override: string };
+      commands: { start: string };
+    },
+  ): void;
 }>();
 
 const dialogRef = ref<HTMLDialogElement | null>(null);
@@ -186,31 +187,34 @@ function swatchStyle(key: string) {
   return { color: c.text, backgroundColor: c.bg };
 }
 
-watch(() => props.open, (open) => {
-  const el = dialogRef.value;
-  if (!el) return;
-  if (open) {
-    form.name = props.name || defaultName.value;
-    form.color = props.iconColor || 'pink';
-    form.iconUrl = props.iconOverride || '';
-    form.startup = props.commandsStart || '';
-    saving.value = false;
-    dragOver.value = false;
-    packageJsonName.value = undefined;
-    if (!el.open) el.showModal();
-    void fetchPackageJsonName();
-  } else if (el.open) {
-    el.close();
-  }
-});
+watch(
+  () => props.open,
+  (open) => {
+    const el = dialogRef.value;
+    if (!el) return;
+    if (open) {
+      form.name = props.name || defaultName.value;
+      form.color = props.iconColor || 'pink';
+      form.iconUrl = props.iconOverride || '';
+      form.startup = props.commandsStart || '';
+      saving.value = false;
+      dragOver.value = false;
+      packageJsonName.value = undefined;
+      if (!el.open) el.showModal();
+      void fetchPackageJsonName();
+    } else if (el.open) {
+      el.close();
+    }
+  },
+);
 
 async function fetchPackageJsonName() {
-  if (!props.baseUrl || !props.worktree) return;
+  if (!props.worktree) return;
   try {
-    const result = await opencodeApi.readFileContent(props.baseUrl, {
+    const result = (await opencodeApi.readFileContent({
       directory: props.worktree,
       path: 'package.json',
-    }) as { content?: string; encoding?: string } | string;
+    })) as { content?: string; encoding?: string } | string;
     const content = typeof result === 'string' ? result : result?.content;
     if (!content) return;
     const isBase64 = typeof result !== 'string' && result?.encoding === 'base64';

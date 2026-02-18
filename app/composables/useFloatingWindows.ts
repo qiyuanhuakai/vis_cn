@@ -60,9 +60,12 @@ function nextZIndex(): number {
 
 function variantToGutterMode(variant?: string): 'none' | 'single' | 'double' {
   switch (variant) {
-    case 'diff': return 'double';
-    case 'code': return 'single';
-    default: return 'none';
+    case 'diff':
+      return 'double';
+    case 'code':
+      return 'single';
+    default:
+      return 'none';
   }
 }
 

@@ -160,7 +160,8 @@ onBeforeUnmount(() => {
   white-space: normal;
 }
 
-.message-content :deep(.markdown-host :where(p, ul, ol, li, blockquote, pre, hr, h1, h2, h3, h4, h5, h6)) {
+.message-content
+  :deep(.markdown-host :where(p, ul, ol, li, blockquote, pre, hr, h1, h2, h3, h4, h5, h6)) {
   margin: 0;
   margin-block: 0;
   padding: 0;
@@ -253,8 +254,6 @@ onBeforeUnmount(() => {
   margin-top: 0.5em;
 }
 
-
-
 .message-content :deep(.markdown-host blockquote) {
   margin: 0.2em 0;
   padding-left: 0.7em;
@@ -328,7 +327,7 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   font-size: 0.95em;
-  color: #79B8FF;
+  color: #79b8ff;
 }
 
 .message-content :deep(.markdown-host pre) {
@@ -348,5 +347,4 @@ onBeforeUnmount(() => {
   padding: 0;
   color: inherit;
 }
-
 </style>

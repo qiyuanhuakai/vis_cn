@@ -51,8 +51,8 @@
 </template>
 
 <script setup lang="ts">
- import { toRefs } from 'vue';
- import { Icon } from '@iconify/vue';
+import { toRefs } from 'vue';
+import { Icon } from '@iconify/vue';
 import TodoList from './TodoList.vue';
 import TreeView, { type TreeNode } from './TreeView.vue';
 

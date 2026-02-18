@@ -174,12 +174,10 @@
               @keydown.enter="handleLogin"
             />
           </div>
-          <p v-if="initErrorMessage" class="app-loading-message app-error-message">{{ initErrorMessage }}</p>
-          <button
-            type="button"
-            class="app-loading-retry bg-indigo-500!"
-            @click="handleLogin"
-          >
+          <p v-if="initErrorMessage" class="app-loading-message app-error-message">
+            {{ initErrorMessage }}
+          </p>
+          <button type="button" class="app-loading-retry bg-indigo-500!" @click="handleLogin">
             Connect
           </button>
 
@@ -188,7 +186,9 @@
         <div v-else>
           <div class="app-loading-spinner" aria-hidden="true"></div>
           <p class="app-loading-title">Loading session data...</p>
-          <p class="app-loading-message">{{ uiInitState === 'error' ? initErrorMessage : initLoadingMessage }}</p>
+          <p class="app-loading-message">
+            {{ uiInitState === 'error' ? initErrorMessage : initLoadingMessage }}
+          </p>
           <div class="app-loading-actions">
             <button
               v-if="uiInitState === 'error'"
@@ -212,18 +212,13 @@
     </div>
     <ProjectPicker
       :open="isProjectPickerOpen"
-      :base-url="credentials.baseUrl.value"
       :home-path="homePath"
       @close="isProjectPickerOpen = false"
       @select="handleProjectDirectorySelect"
     />
-    <SettingsModal
-      :open="isSettingsOpen"
-      @close="isSettingsOpen = false"
-    />
+    <SettingsModal :open="isSettingsOpen" @close="isSettingsOpen = false" />
     <ProjectSettingsDialog
       :open="!!editingProject"
-      :base-url="credentials.baseUrl.value"
       :project-id="editingProject?.projectId ?? ''"
       :worktree="editingProject?.worktree ?? ''"
       :name="editingProjectMeta?.name"
@@ -247,6 +242,7 @@ import {
   shallowRef,
   triggerRef,
   watch,
+  watchEffect,
 } from 'vue';
 import { bundledThemes } from 'shiki/bundle/web';
 import { Terminal } from '@xterm/xterm';
@@ -265,7 +261,10 @@ import SubagentContent from './components/ToolWindow/Subagent.vue';
 import WebContent from './components/ToolWindow/Web.vue';
 import SidePanel from './components/SidePanel.vue';
 import Welcome from './components/Welcome.vue';
-import TopPanel, { type TopPanelNotificationSession, type TopPanelWorktree } from './components/TopPanel.vue';
+import TopPanel, {
+  type TopPanelNotificationSession,
+  type TopPanelWorktree,
+} from './components/TopPanel.vue';
 import SettingsModal from './components/SettingsModal.vue';
 import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue';
 import PermissionContent from './components/ToolWindow/Permission.vue';
@@ -288,13 +287,17 @@ import { useDeltaAccumulator } from './composables/useDeltaAccumulator';
 import { useGlobalEvents } from './composables/useGlobalEvents';
 import { useMessages } from './composables/useMessages';
 import { useReasoningWindows, type ReasoningFinish } from './composables/useReasoningWindows';
+import { useServerState } from './composables/useServerState';
+import { useSessionSelection } from './composables/useSessionSelection';
 import { useSubagentWindows } from './composables/useSubagentWindows';
 import { renderWorkerHtml } from './utils/workerRenderer';
 import type { MessageInfo, MessagePart, ReasoningPart, ToolPart } from './types/sse';
-import { extractFileRead as extractToolFileRead, extractPatch as extractToolPatch } from './utils/toolRenderers';
+import {
+  extractFileRead as extractToolFileRead,
+  extractPatch as extractToolPatch,
+} from './utils/toolRenderers';
 import * as opencodeApi from './utils/opencode';
 import { opencodeTheme, resolveTheme, resolveAgentColor } from './utils/theme';
-import { createSessionGraphStore } from './utils/sessionGraph';
 import { splitFileContentDirectoryAndPath } from './utils/path';
 import { useCredentials } from './composables/useCredentials';
 import { useSettings } from './composables/useSettings';
@@ -343,8 +346,6 @@ const MAIN_REASONING_TITLE = 'Reasoning';
 const REASONING_CLOSE_DELAY_MS = 3000;
 const SUBAGENT_CLOSE_DELAY_MS = 3000;
 const ATTACHMENT_MIME_ALLOWLIST = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
-
-
 
 type TodoItem = {
   content: string;
@@ -483,7 +484,12 @@ const fw = useFloatingWindows();
 watch(suppressAutoWindows, (suppressed) => {
   if (!suppressed) return;
   for (const entry of fw.entries.value) {
-    if (!entry.closable && (entry.expiresAt < Number.MAX_SAFE_INTEGER || entry.key.startsWith('reasoning:') || entry.key.startsWith('subagent:'))) {
+    if (
+      !entry.closable &&
+      (entry.expiresAt < Number.MAX_SAFE_INTEGER ||
+        entry.key.startsWith('reasoning:') ||
+        entry.key.startsWith('subagent:'))
+    ) {
       void fw.close(entry.key);
     }
   }
@@ -494,7 +500,11 @@ const outputEl = ref<HTMLElement | null>(null);
 const inputEl = ref<HTMLElement | null>(null);
 const toolWindowCanvasEl = ref<HTMLDivElement | null>(null);
 const outputPanelRef = ref<{ panelEl: HTMLDivElement | null } | null>(null);
-const topPanelRef = ref<{ openSessionDropdown: () => void; closeSessionDropdown: () => void; toggleSessionDropdown: () => void } | null>(null);
+const topPanelRef = ref<{
+  openSessionDropdown: () => void;
+  closeSessionDropdown: () => void;
+  toggleSessionDropdown: () => void;
+} | null>(null);
 const inputPanelRef = ref<{ focus: () => void; reset: () => void } | null>(null);
 const outputPanelContainerEl = computed(() => outputPanelRef.value?.panelEl ?? undefined);
 const outputPanelScrollMode = computed<ScrollMode>(() => 'follow');
@@ -566,7 +576,6 @@ const permissionSendingById = ref<Record<string, boolean>>({});
 const permissionErrorById = ref<Record<string, string>>({});
 const questionSendingById = ref<Record<string, boolean>>({});
 const questionErrorById = ref<Record<string, string>>({});
-const pendingNotificationsBySessionId = ref(new Map<string, Set<string>>());
 const notificationSessionOrder = ref<string[]>([]);
 const notificationPermissionRequested = ref(false);
 
@@ -597,27 +606,13 @@ type ProjectInfo = {
   commands?: { start?: string };
 };
 
-const PROJECT_COLOR_HEX: Record<string, string> = {
-  pink: '#e34ba9',
-  mint: '#95f3d9',
-  orange: '#ff802b',
-  purple: '#9d5bd2',
-  cyan: '#369eff',
-  lime: '#c4f042',
-};
-
-function resolveProjectColorHex(raw?: string): string | undefined {
-  if (!raw) return undefined;
-  const trimmed = raw.trim();
-  return PROJECT_COLOR_HEX[trimmed] ?? trimmed;
-}
-
 type SessionInfo = {
   id: string;
   projectID?: string;
   parentID?: string;
   title?: string;
   slug?: string;
+  status?: 'busy' | 'idle' | 'retry';
   directory?: string;
   time?: {
     created?: number;
@@ -652,10 +647,6 @@ type WorktreeInfo = {
   name: string;
   branch: string;
   directory: string;
-};
-
-type VcsInfo = {
-  branch: string;
 };
 
 type ProviderModel = {
@@ -707,28 +698,6 @@ type CommandInfo = {
   hints?: string[];
 };
 
-const projects = computed<ProjectInfo[]>(() => {
-  return sessionGraphStore.value.getProjects() as ProjectInfo[];
-});
-const worktrees = computed<string[]>(() => {
-  const pd = projectDirectory.value?.trim();
-  if (!pd) return [];
-  return sessionGraphStore.value.getWorktrees(pd);
-});
-const worktreeMetaByDir = computed<Record<string, VcsInfo>>(() => {
-  const result: Record<string, VcsInfo> = {};
-  worktrees.value.forEach((dir) => {
-    const info = sessionGraphStore.value.getVcsInfo(dir);
-    if (info) result[dir] = info;
-  });
-  return result;
-});
-const worktreeMetaRequestIdByDir = new Map<string, number>();
-let worktreeMetaRequestId = 0;
-const sessionGraphStore = shallowRef(createSessionGraphStore());
-let graphForWrite: ReturnType<typeof createSessionGraphStore> = sessionGraphStore.value;
-let rebuildingGraph = false;
-const bootstrapReady = ref(false);
 const providers = ref<ProviderInfo[]>([]);
 const agents = ref<AgentInfo[]>([]);
 const commands = ref<CommandInfo[]>([]);
@@ -753,16 +722,149 @@ const providersLoading = ref(false);
 const providersFetchCount = ref(0);
 const agentsLoading = ref(false);
 const commandsLoading = ref(false);
-const selectedProjectId = computed(() => {
-  const sandbox = sessionGraphStore.value.getSandbox(projectDirectory.value, activeDirectory.value);
-  return sandbox?.projectID ?? '';
+const serverState = useServerState();
+const bootstrapReady = serverState.bootstrapped;
+const sessionSelection = useSessionSelection(
+  computed(() => serverState.projects),
+  async (projectId) => {
+    const directory = serverState.projects[projectId]?.worktree?.trim() || undefined;
+    const created = (await opencodeApi.createSession(directory)) as SessionInfo;
+    if (!created?.id) {
+      throw new Error('Session create failed: invalid response.');
+    }
+    serverState.notifySessionMutated(created);
+    return { id: created.id, projectId: created.projectID || projectId };
+  },
+);
+const {
+  selectedKey,
+  selectedProjectId,
+  selectedSessionId,
+  projectDirectory,
+  activeDirectory,
+  switchSession: switchSessionSelection,
+  ensureSession: ensureSessionSelection,
+  initialize: initializeSessionSelection,
+} = sessionSelection;
+
+function toSessionInfo(
+  projectID: string,
+  directory: string,
+  session: {
+    id: string;
+    parentID?: string;
+    title?: string;
+    slug?: string;
+    status?: 'busy' | 'idle' | 'retry';
+    timeCreated?: number;
+    timeUpdated?: number;
+    timeArchived?: number;
+  },
+): SessionInfo {
+  return {
+    id: session.id,
+    projectID,
+    parentID: session.parentID,
+    title: session.title,
+    slug: session.slug,
+    directory,
+    status: session.status,
+    time: {
+      created: session.timeCreated,
+      updated: session.timeUpdated,
+      archived: session.timeArchived,
+    },
+  };
+}
+
+function collectAllSessionsByProject() {
+  const byProject: Record<string, SessionInfo[]> = {};
+  Object.values(serverState.projects).forEach((project) => {
+    const list: SessionInfo[] = [];
+    Object.values(project.sandboxes).forEach((sandbox) => {
+      Object.values(sandbox.sessions).forEach((session) => {
+        list.push(toSessionInfo(project.id, sandbox.directory, session));
+      });
+    });
+    byProject[project.id] = list;
+  });
+  return byProject;
+}
+
+const sessionsByProject = computed(() => collectAllSessionsByProject());
+
+const projects = computed<ProjectInfo[]>(() =>
+  Object.values(serverState.projects).map((project) => ({
+    id: project.id,
+    worktree: project.worktree,
+    sandboxes: Object.keys(project.sandboxes),
+    color: project.color,
+    name: project.name,
+  })),
+);
+
+const worktrees = computed<string[]>(() => {
+  const project = serverState.projects[selectedProjectId.value];
+  if (!project) return [];
+  const unique = new Set<string>([project.worktree]);
+  Object.keys(project.sandboxes).forEach((directory) => {
+    unique.add(directory);
+  });
+  return Array.from(unique);
 });
+
+const allWorktreeDirectories = computed(() => {
+  const unique = new Set<string>();
+  Object.values(serverState.projects).forEach((project) => {
+    const root = project.worktree?.trim();
+    if (root) unique.add(root);
+  });
+  return Array.from(unique);
+});
+
+const allSandboxDirectories = computed(() => {
+  const unique = new Set<string>();
+  Object.values(serverState.projects).forEach((project) => {
+    Object.keys(project.sandboxes).forEach((directory) => {
+      const normalized = directory.trim();
+      if (normalized) unique.add(normalized);
+    });
+  });
+  return Array.from(unique);
+});
+
+const sessions = computed<SessionInfo[]>(() => {
+  const projectId = selectedProjectId.value.trim();
+  if (!projectId) return [];
+  const directory = activeDirectory.value.trim();
+  const all = sessionsByProject.value[projectId] ?? [];
+  const roots = all.filter((session) => !session.parentID);
+  const filtered = directory
+    ? roots.filter((session) => !session.directory || session.directory === directory)
+    : roots;
+  return filtered
+    .slice()
+    .sort(
+      (a, b) =>
+        (b.time?.updated ?? b.time?.created ?? 0) - (a.time?.updated ?? a.time?.created ?? 0),
+    );
+});
+
+const sessionParentById = computed(() => {
+  const map = new Map<string, string | undefined>();
+  const projectId = selectedProjectId.value.trim();
+  if (!projectId) return map;
+  const all = sessionsByProject.value[projectId] ?? [];
+  all.forEach((session) => {
+    map.set(session.id, session.parentID);
+  });
+  return map;
+});
+
 const currentProjectColor = computed(() => {
-  const pid = sessionGraphStore.value.resolveProjectIDForDirectory(projectDirectory.value);
-  return pid ? projectColorById.value[pid] : undefined;
+  const project = serverState.projects[selectedProjectId.value];
+  return project?.color;
 });
-const activeDirectory = ref('');
-const selectedSessionId = ref('');
 
 const reasoning = useReasoningWindows({
   selectedSessionId,
@@ -776,9 +878,7 @@ const reasoning = useReasoningWindows({
   },
   suppressAutoWindows,
 });
-const {
-  updateReasoningExpiry,
-} = reasoning;
+const { updateReasoningExpiry } = reasoning;
 
 const subagentWindows = useSubagentWindows({
   selectedSessionId,
@@ -793,18 +893,15 @@ const subagentWindows = useSubagentWindows({
   suppressAutoWindows,
 });
 
-const projectDirectory = ref('');
 const homePath = ref('');
 const serverWorktreePath = ref('');
-const projectColorById = ref<Record<string, string>>({});
-const projectMetaById = ref<Record<string, ProjectInfo>>({});
 
 const initialQuery = readQuerySelection();
 const isProjectPickerOpen = ref(false);
 const editingProject = ref<{ projectId: string; worktree: string } | null>(null);
 const editingProjectMeta = computed(() => {
   const pid = editingProject.value?.projectId;
-  return pid ? projectMetaById.value[pid] : undefined;
+  return pid ? serverState.projects[pid] : undefined;
 });
 const isSettingsOpen = ref(false);
 const selectedMode = ref('build');
@@ -862,32 +959,6 @@ const baseWorktreeOptions = computed(() => {
   return Array.from(unique);
 });
 
-const allWorktreeDirectories = computed(() => {
-  return sessionGraphStore.value.getWorktreeList();
-});
-
-const allSandboxDirectories = computed(() => {
-  const dirs: string[] = [];
-  for (const wt of sessionGraphStore.value.getWorktreeList()) {
-    dirs.push(...sessionGraphStore.value.getSandboxList(wt));
-  }
-  return dirs;
-});
-
-const sessions = computed(() => {
-  const directory = activeDirectory.value.trim();
-  const projectID = selectedProjectId.value.trim();
-  return sessionGraphStore.value.getRootSessions({
-    projectID: projectID || undefined,
-    directory: directory || undefined,
-  }) as SessionInfo[];
-});
-
-const sessionParentById = computed(() => {
-  const directory = activeDirectory.value.trim();
-  return sessionGraphStore.value.getParentMap(directory || undefined);
-});
-
 const sessionParentRecord = reactive<Record<string, string | undefined>>({});
 watch(
   sessionParentById,
@@ -915,100 +986,64 @@ const filteredSessions = computed(() =>
 );
 
 const topPanelTreeData = computed<TopPanelWorktree[]>(() => {
-  const graph = sessionGraphStore.value;
-
-  const worktreeEntries = allWorktreeDirectories.value
-    .map((worktreeDirectory) => {
-      const sandboxEntries = graph
-        .getSandboxList(worktreeDirectory)
-        .map((sandboxDirectory) => {
-          const roots = graph.getRootSessions({ directory: sandboxDirectory }) as SessionInfo[];
-          const sessionsForSandbox = roots
+  const entries = Object.values(serverState.projects)
+    .map((project) => {
+      const worktreeDirectory = project.worktree;
+      const sandboxEntries = Object.values(project.sandboxes)
+        .map((sandbox) => {
+          const sessionsForSandbox = sandbox.rootSessions
+            .map((sessionId) => sandbox.sessions[sessionId])
+            .filter((session): session is NonNullable<typeof session> => Boolean(session))
             .map((session) => ({
               id: session.id,
               title: session.title,
               slug: session.slug,
-              status: (graph.getStatus(session.id, session.projectID) ??
-                'unknown') as 'busy' | 'idle' | 'retry' | 'unknown',
-              timeUpdated: session.time?.updated ?? session.time?.created,
-              archivedAt: session.time?.archived,
+              status: (session.status ?? 'unknown') as 'busy' | 'idle' | 'retry' | 'unknown',
+              timeUpdated: session.timeUpdated ?? session.timeCreated,
+              archivedAt: session.timeArchived,
             }))
             .sort((a, b) => (b.timeUpdated ?? 0) - (a.timeUpdated ?? 0));
-
-          const branch = graph.getVcsInfo(sandboxDirectory)?.branch;
           const latestUpdated = sessionsForSandbox[0]?.timeUpdated ?? 0;
-          const oldestCreated = roots.length > 0
-            ? Math.min(...roots.map((s) => s.time?.created ?? Infinity))
-            : 0;
-
+          const oldestCreated =
+            sessionsForSandbox.length > 0
+              ? Math.min(...sessionsForSandbox.map((session) => session.timeUpdated ?? Infinity))
+              : 0;
           return {
-            directory: sandboxDirectory,
-            branch,
+            directory: sandbox.directory,
+            branch: sandbox.name || undefined,
             sessions: sessionsForSandbox,
             latestUpdated,
             oldestCreated,
           };
         })
         .sort((a, b) => {
-          // Primary sandbox (same directory as worktree) comes first
           const aIsPrimary = a.directory === worktreeDirectory;
           const bIsPrimary = b.directory === worktreeDirectory;
           if (aIsPrimary !== bIsPrimary) return aIsPrimary ? -1 : 1;
-          // Then by creation time descending (newest first)
           return (b.oldestCreated || 0) - (a.oldestCreated || 0);
         });
-
       const latestSandboxUpdated = sandboxEntries
         .flatMap((sandbox) => sandbox.sessions)
         .reduce((max, session) => Math.max(max, session.timeUpdated ?? 0), 0);
-
-      const projectId = graph.resolveProjectIDForDirectory(worktreeDirectory);
-      const meta = projectId ? projectMetaById.value[projectId] : undefined;
-      const name = meta?.name?.trim()
-        || worktreeDirectory.replace(/\/+$/, '').split('/').pop()
-        || undefined;
-      const projectColor = projectId ? projectColorById.value[projectId] : undefined;
+      const name =
+        project.name?.trim() || worktreeDirectory.replace(/\/+$/, '').split('/').pop() || undefined;
       return {
         directory: worktreeDirectory,
         label: replaceHomePrefix(worktreeDirectory),
         name,
-        projectId: projectId || undefined,
-        projectColor,
+        projectId: project.id,
+        projectColor: project.color,
         sandboxes: sandboxEntries,
         latestUpdated: latestSandboxUpdated,
       };
     })
     .sort((a, b) => {
-      // "/" worktree always at the bottom
       if (a.directory === '/' && b.directory !== '/') return 1;
       if (b.directory === '/' && a.directory !== '/') return -1;
       return (a.name || a.label).localeCompare(b.name || b.label);
     });
-
-  return worktreeEntries;
+  return entries;
 });
-
-/** Resolve VCS branch for a directory via /vcs (fire-and-forget). */
-function resolveVcsBranch(dir: string) {
-  if (sessionGraphStore.value.getVcsInfo(dir)) return;
-  void fetchWorktreeMeta(dir);
-}
-
-watch(
-  [allWorktreeDirectories, allSandboxDirectories],
-  ([worktreeDirs, sandboxDirs]) => {
-    const worktreeSet = new Set(worktreeDirs);
-    // Resolve VCS branch for all worktree and sandbox directories
-    for (const dir of worktreeDirs) {
-      resolveVcsBranch(dir);
-    }
-    for (const dir of sandboxDirs) {
-      if (worktreeSet.has(dir)) continue;
-      resolveVcsBranch(dir);
-    }
-  },
-  { immediate: true },
-);
 
 const allowedSessionIds = computed(() => {
   const rootId = selectedSessionId.value;
@@ -1038,12 +1073,23 @@ const todoPanelCount = computed(() =>
 
 const notificationSessions = computed<TopPanelNotificationSession[]>(() =>
   notificationSessionOrder.value
-    .filter((sessionId) => pendingNotificationsBySessionId.value.has(sessionId))
+    .filter((sessionId) => Array.isArray(serverState.notifications[sessionId]))
     .map((sessionId) => ({
       sessionId,
-      count: pendingNotificationsBySessionId.value.get(sessionId)?.size ?? 0,
+      count: serverState.notifications[sessionId]?.length ?? 0,
     }))
     .filter((item) => item.count > 0),
+);
+
+watch(
+  () => serverState.notifications,
+  (notifications) => {
+    const keys = Object.keys(notifications);
+    const keep = notificationSessionOrder.value.filter((sessionId) => keys.includes(sessionId));
+    const next = keys.filter((sessionId) => !keep.includes(sessionId));
+    notificationSessionOrder.value = [...keep, ...next];
+  },
+  { immediate: true, deep: true },
 );
 
 const todoPanelSessions = computed(() => {
@@ -1080,7 +1126,7 @@ const hasSession = computed(() => Boolean(selectedSessionId.value));
 const canSend = computed(() =>
   Boolean(
     uiInitState.value === 'ready' &&
-      connectionState.value === 'ready' &&
+    connectionState.value === 'ready' &&
     selectedSessionId.value &&
     !isSending.value &&
     (messageInput.value.trim().length > 0 || attachments.value.length > 0),
@@ -1090,7 +1136,6 @@ const canSend = computed(() =>
 const busyDescendantSessionIds = computed(() => {
   const allowed = allowedSessionIds.value;
   const selected = selectedSessionId.value;
-  void sessionGraphStore.value;
   const ids: string[] = [];
   for (const sid of allowed) {
     if (sid === selected) continue;
@@ -1102,7 +1147,6 @@ const busyDescendantSessionIds = computed(() => {
 
 const isThinking = computed(() => {
   const selected = selectedSessionId.value;
-  void sessionGraphStore.value;
   const ownStatus = selected ? getSessionStatus(selected) : undefined;
   return Boolean(
     ownStatus === 'busy' ||
@@ -1114,10 +1158,10 @@ const isThinking = computed(() => {
 const canAbort = computed(() =>
   Boolean(
     uiInitState.value === 'ready' &&
-      connectionState.value === 'ready' &&
-      selectedSessionId.value &&
-      isThinking.value &&
-      !isAborting.value,
+    connectionState.value === 'ready' &&
+    selectedSessionId.value &&
+    isThinking.value &&
+    !isAborting.value,
   ),
 );
 const hasAgentOptions = computed(() => agentOptions.value.length > 0);
@@ -1164,8 +1208,6 @@ function normalizeDirectory(value: string) {
   const trimmed = value.replace(/\/+$/, '');
   return trimmed || value;
 }
-
-
 
 function replaceHomePrefix(path: string) {
   const normalizedPath = normalizeDirectory(path);
@@ -1310,7 +1352,6 @@ function replaceQuerySelection(projectId: string, sessionId: string) {
   window.history.replaceState({}, '', url.toString());
 }
 
-
 function buildComposerContextKey(projectId: string, sessionId: string) {
   const normalizedProjectId = projectId.trim();
   const normalizedSessionId = sessionId.trim();
@@ -1447,7 +1488,19 @@ function setSidePanelTab(value: 'todo' | 'tree') {
 }
 
 function resolveProjectIdForSession(sessionId: string) {
-  return graphForWrite.getProjectIDForSession(sessionId, selectedProjectId.value || undefined);
+  const preferredProjectId = selectedProjectId.value.trim();
+  if (preferredProjectId) {
+    const preferredSessions = sessionsByProject.value[preferredProjectId] ?? [];
+    if (preferredSessions.some((session) => session.id === sessionId)) {
+      return preferredProjectId;
+    }
+  }
+  for (const [projectId, projectSessions] of Object.entries(sessionsByProject.value)) {
+    if (projectSessions.some((session) => session.id === sessionId)) {
+      return projectId;
+    }
+  }
+  return '';
 }
 
 function clearComposerInputState() {
@@ -1463,7 +1516,7 @@ function applyComposerDraftToComposerState(draft: ComposerDraft, contextKey: str
   composerDraftRevisionByContext.set(contextKey, draft.rev);
   messageInput.value = draft.messageInput;
   attachments.value = draft.attachments.slice();
-  
+
   // Bootstrap guard: if options not loaded yet, apply draft values as-is
   if (agentOptions.value.length === 0 || modelOptions.value.length === 0) {
     if (draft.agent) selectedMode.value = draft.agent;
@@ -1471,7 +1524,7 @@ function applyComposerDraftToComposerState(draft: ComposerDraft, contextKey: str
     selectedThinking.value = draft.variant;
     return;
   }
-  
+
   // Validate and apply agent
   let agentToApply = draft.agent;
   if (draft.agent && !agentOptions.value.some((o) => o.id === draft.agent)) {
@@ -1482,13 +1535,13 @@ function applyComposerDraftToComposerState(draft: ComposerDraft, contextKey: str
     agentToApply = draft.agent;
     selectedMode.value = agentToApply;
   }
-  
+
   // Apply agent defaults to get correct model and variant
   if (agentToApply) {
     selectedMode.value = agentToApply;
     applyAgentDefaults(agentToApply);
   }
-  
+
   // Validate and apply model
   if (draft.model && modelOptions.value.some((m) => m.id === draft.model)) {
     // Model is valid, use it
@@ -1499,7 +1552,7 @@ function applyComposerDraftToComposerState(draft: ComposerDraft, contextKey: str
       selectedModel.value = modelOptions.value[0].id;
     }
   }
-  
+
   // Validate and apply variant
   if (draft.variant && thinkingOptions.value.includes(draft.variant)) {
     selectedThinking.value = draft.variant;
@@ -1551,39 +1604,7 @@ function clearComposerDraftForCurrentContext() {
 }
 
 function pruneOrphanedComposerDrafts() {
-  // Disabled: session graph may be incomplete, causing false-positive draft deletion.
-  // Re-enable after session graph construction is fully reliable.
   return;
-  if (!bootstrapReady.value) return;
-  const store = readComposerDraftStore();
-  const knownSessionIDs = sessionGraphStore.value.getKnownSessionIDs();
-  if (knownSessionIDs.size === 0) return;
-  const currentContextKey = draftKeyForSelectedContext();
-  const cleaned: Record<string, ComposerDraft> = {};
-
-  Object.entries(store).forEach(([key, draft]) => {
-    // Always keep the currently active session's draft
-    if (key === currentContextKey) {
-      cleaned[key] = draft;
-      return;
-    }
-
-    // Parse the key format: projectId:sessionId
-    const parts = key.split(':');
-    if (parts.length !== 2) {
-      // Invalid key format, skip it
-      return;
-    }
-
-    const sessionId = parts[1];
-    // Keep draft if session exists in the graph
-    if (knownSessionIDs.has(sessionId)) {
-      cleaned[key] = draft;
-    }
-    // Otherwise, it's orphaned and will be removed (not added to cleaned)
-  });
-
-  writeComposerDraftStore(cleaned);
 }
 
 function handleMessageInputUpdate(value: string) {
@@ -1614,17 +1635,18 @@ function applyAgentDefaults(agentName: string) {
 
 function resolveDefaultAgentModel(): { agent: string; model: string; variant: string | undefined } {
   // Determine the default agent: prefer 'build' if it exists, otherwise use first available
-  const defaultAgent = agentOptions.value.find((o) => o.id === 'build')?.id ?? agentOptions.value[0]?.id ?? '';
-  
+  const defaultAgent =
+    agentOptions.value.find((o) => o.id === 'build')?.id ?? agentOptions.value[0]?.id ?? '';
+
   // Set the agent and apply its defaults (model + variant)
   selectedMode.value = defaultAgent;
   applyAgentDefaults(defaultAgent);
-  
+
   // If model is still empty after applyAgentDefaults, fall back to provider default or first model
   if (!selectedModel.value && modelOptions.value.length > 0) {
     // Try to find a model from provider defaults
     const providers_data = providers.value;
-    const defaults = providers_data.length > 0 ? (providers_data[0] as any)?.default ?? {} : {};
+    const defaults = providers_data.length > 0 ? ((providers_data[0] as any)?.default ?? {}) : {};
     const preferredModelId = Object.entries(defaults)
       .map(([providerID, modelID]) => {
         const match = modelOptions.value.find(
@@ -1633,10 +1655,10 @@ function resolveDefaultAgentModel(): { agent: string; model: string; variant: st
         return match?.id;
       })
       .find((id) => Boolean(id));
-    
+
     selectedModel.value = preferredModelId || modelOptions.value[0]?.id || '';
   }
-  
+
   return {
     agent: selectedMode.value,
     model: selectedModel.value,
@@ -1729,7 +1751,13 @@ function clamp(value: number, min: number, max: number) {
 
 function getSessionStatus(sessionId: string, projectId?: string) {
   if (!sessionId) return undefined;
-  return sessionGraphStore.value.getStatus(sessionId, projectId);
+  const preferredProjectId = projectId?.trim() || resolveProjectIdForSession(sessionId);
+  const candidates = preferredProjectId
+    ? (sessionsByProject.value[preferredProjectId] ?? [])
+    : Object.values(sessionsByProject.value).flat();
+  const found = candidates.find((session) => session.id === sessionId);
+  const status = found?.status;
+  return status === 'busy' || status === 'idle' || status === 'retry' ? status : undefined;
 }
 
 function getDescendantSessionIds(rootId: string): string[] {
@@ -1760,7 +1788,6 @@ function hasAnyBusyDescendant(rootId: string, projectId?: string): boolean {
 }
 
 const sessionStatusByIdRecord = computed<Record<string, SessionStatusType>>(() => {
-  void sessionGraphStore.value;
   const next: Record<string, SessionStatusType> = {};
   sessions.value.forEach((session) => {
     if (session.parentID) return;
@@ -1775,18 +1802,6 @@ const sessionStatusByIdRecord = computed<Record<string, SessionStatusType>>(() =
   });
   return next;
 });
-
-function setSessionStatus(sessionId: string, status: SessionStatusType, projectId?: string) {
-  if (!sessionId) return;
-  graphForWrite.setStatus(sessionId, status, projectId);
-  markSessionGraphChanged();
-}
-
-function deleteSessionStatus(sessionId: string, projectId?: string) {
-  if (!sessionId) return;
-  graphForWrite.setStatus(sessionId, 'idle', projectId);
-  markSessionGraphChanged();
-}
 
 function measureTerminalCellWidth(fontFamily: string, fontSizePx: number) {
   if (typeof document === 'undefined') return fontSizePx * 0.62;
@@ -2099,55 +2114,19 @@ function handlePointerUp() {
   inputResizeState.value = null;
 }
 
-function markSessionGraphChanged() {
-  if (rebuildingGraph) return;
-  triggerRef(sessionGraphStore);
-  pruneOrphanedComposerDrafts();
-}
-
 function resolveProjectIdForDirectory(directory?: string) {
   const normalized = directory?.trim() || '';
   if (!normalized) return '';
-  return graphForWrite.resolveProjectIDForDirectory(normalized);
-}
-
-function setSessions(list: SessionInfo[], directoryContext?: string) {
-  const next = Array.isArray(list) ? list : [];
-  const contextDirectory = (directoryContext ?? activeDirectory.value ?? '').trim();
-  const projectIDHint =
-    selectedProjectId.value ||
-    graphForWrite.resolveProjectIDForDirectory(contextDirectory || undefined);
-  next.forEach((session) => {
-    const directory = session.directory?.trim() || contextDirectory;
-    if (session.projectID && directory) {
-      graphForWrite.setSandboxProjectID(directory, session.projectID);
-    }
-    graphForWrite.upsertSession(session, {
-      projectIDHint: session.projectID || projectIDHint || undefined,
-      directoryHint: directory || undefined,
-      retention: session.parentID ? 'ephemeral' : 'persistent',
-    });
-  });
-  markSessionGraphChanged();
-}
-
-function upsertSessionGraph(info: SessionInfo) {
-  graphForWrite.upsertSession(info, {
-    projectIDHint: selectedProjectId.value || undefined,
-    directoryHint: activeDirectory.value || undefined,
-    retention: info.parentID ? 'ephemeral' : 'persistent',
-  });
-  markSessionGraphChanged();
-}
-
-function removeSessionFromGraph(sessionId: string) {
-  graphForWrite.removeSession(sessionId, selectedProjectId.value || undefined);
-  markSessionGraphChanged();
+  for (const [projectId, project] of Object.entries(serverState.projects)) {
+    if (project.worktree === normalized) return projectId;
+    if (project.sandboxes[normalized]) return projectId;
+  }
+  return '';
 }
 
 async function fetchHomePath() {
   try {
-    const data = (await opencodeApi.getPathInfo(credentials.baseUrl.value)) as {
+    const data = (await opencodeApi.getPathInfo()) as {
       home?: string;
       worktree?: string;
     };
@@ -2162,51 +2141,6 @@ async function fetchHomePath() {
   }
 }
 
-async function fetchProjects(directory?: string) {
-  projectError.value = '';
-  try {
-    const data = (await opencodeApi.listProjects(credentials.baseUrl.value, directory)) as ProjectInfo[];
-    const list = Array.isArray(data) ? data : [];
-    list.forEach((project) => {
-      const color = project.color ?? project.icon?.color;
-      const hex = resolveProjectColorHex(color);
-      if (hex) {
-        projectColorById.value[project.id] = hex;
-      }
-      projectMetaById.value[project.id] = project;
-      const worktree = typeof project.worktree === 'string' ? project.worktree : '';
-      const sandboxes = Array.isArray(project.sandboxes)
-        ? project.sandboxes.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-      graphForWrite.syncSandboxes(worktree, sandboxes);
-      if (worktree && project.id) {
-        graphForWrite.setProjectRoot(project.id, worktree);
-      }
-    });
-    markSessionGraphChanged();
-  } catch (error) {
-    projectError.value = `Project load failed: ${toErrorMessage(error)}`;
-  }
-}
-
-function upsertProject(next: ProjectInfo) {
-  const color = next.color ?? next.icon?.color;
-  const hex = resolveProjectColorHex(color);
-  if (hex) {
-    projectColorById.value[next.id] = hex;
-  }
-  projectMetaById.value[next.id] = next;
-  const worktree = typeof next.worktree === 'string' ? next.worktree : '';
-  const sandboxes = Array.isArray(next.sandboxes)
-    ? next.sandboxes.filter((entry): entry is string => typeof entry === 'string')
-    : [];
-  graphForWrite.syncSandboxes(worktree, sandboxes);
-  if (worktree && next.id) {
-    graphForWrite.setProjectRoot(next.id, worktree);
-  }
-  markSessionGraphChanged();
-}
-
 function handleEditProject(payload: { projectId: string; worktree: string }) {
   editingProject.value = payload;
 }
@@ -2219,41 +2153,21 @@ async function handleSaveProject(payload: {
   commands: { start: string };
 }) {
   try {
-    const result = await opencodeApi.updateProject(credentials.baseUrl.value, payload.projectId, {
+    const result = await opencodeApi.updateProject(payload.projectId, {
       directory: payload.worktree,
       name: payload.name,
       icon: payload.icon,
       commands: payload.commands,
     });
     if (result && typeof result === 'object') {
-      upsertProject(result as ProjectInfo);
+      serverState.notifyProjectMutated(
+        result as Parameters<typeof serverState.notifyProjectMutated>[0],
+      );
     }
     editingProject.value = null;
   } catch (error) {
     console.error('Failed to update project:', error);
   }
-}
-
-function resolveDirectory(directory: string, baseDir: string) {
-  const trimmed = directory.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('/')) return trimmed;
-  if (!baseDir) return trimmed;
-  if (trimmed === '.') return baseDir;
-  return baseDir.replace(/\/+$/, '') + '/' + trimmed.replace(/^\.\//, '');
-}
-
-function projectSessionDirectories(project?: ProjectInfo) {
-  if (!project) return [] as string[];
-  const baseDir = serverWorktreePath.value;
-  const candidates = [] as string[];
-  if (project.worktree) candidates.push(resolveDirectory(project.worktree, baseDir));
-  if (Array.isArray(project.sandboxes)) {
-    candidates.push(...project.sandboxes.map((s) => resolveDirectory(s, baseDir)));
-  }
-  return Array.from(
-    new Set(candidates.map((directory) => directory.trim()).filter((directory) => directory)),
-  );
 }
 
 async function listSessionsByDirectory(
@@ -2267,7 +2181,7 @@ async function listSessionsByDirectory(
 ) {
   sessionError.value = '';
   try {
-    const data = (await opencodeApi.listSessions(credentials.baseUrl.value, options)) as SessionInfo[];
+    const data = (await opencodeApi.listSessions(options)) as SessionInfo[];
     return Array.isArray(data) ? data : [];
   } catch (error) {
     const message = `Session load failed: ${toErrorMessage(error)}`;
@@ -2276,72 +2190,21 @@ async function listSessionsByDirectory(
   }
 }
 
-async function fetchWorktrees(directory?: string) {
-  worktreeError.value = '';
-  if (!directory) return;
-  try {
-    const baseDir = directory.trim();
-    const data = await opencodeApi.listWorktrees(credentials.baseUrl.value, baseDir);
-    const list = Array.isArray(data)
-      ? data.filter((entry): entry is string => typeof entry === 'string')
-      : [];
-    if (directory !== projectDirectory.value) return;
-    if (baseDir && !list.includes(baseDir)) list.unshift(baseDir);
-    const current = activeDirectory.value;
-    if (current && !list.includes(current)) list.unshift(current);
-    graphForWrite.syncSandboxes(baseDir, list);
-    markSessionGraphChanged();
-  } catch (error) {
-    worktreeError.value = `Worktree load failed: ${toErrorMessage(error)}`;
-  }
-}
-
-async function fetchWorktreeMeta(directory: string) {
-  const trimmed = directory.trim();
-  if (!trimmed) return;
-  const normalized = normalizeDirectory(trimmed);
-  const requestId = ++worktreeMetaRequestId;
-  worktreeMetaRequestIdByDir.set(normalized, requestId);
-  try {
-    const data = (await opencodeApi.getVcsInfo(credentials.baseUrl.value, trimmed)) as VcsInfo;
-    if (!data || typeof data.branch !== 'string') return;
-    if (worktreeMetaRequestIdByDir.get(normalized) !== requestId) return;
-    graphForWrite.setSandboxBranch(normalized, data.branch);
-    markSessionGraphChanged();
-  } catch {
-    return;
-  }
-}
-
 function hasWorktreeDirectory(directory: string) {
   const normalized = normalizeDirectory(directory);
   return worktrees.value.some((entry) => normalizeDirectory(entry) === normalized);
 }
 
-function appendWorktreeDirectory(directory: string) {
-  const trimmed = directory.trim();
-  if (!trimmed) return;
-  const pd = projectDirectory.value?.trim();
-  if (!pd) return;
-  graphForWrite.ensureSandbox(pd, trimmed);
-  markSessionGraphChanged();
-}
-
-function storePendingWorktreeMeta(directory: string, branch?: string) {
-  if (!branch) return;
-  const normalized = normalizeDirectory(directory);
-  graphForWrite.setSandboxBranch(normalized, branch);
-}
-
-async function handleWorktreeReady(event: { directory: string; branch?: string }) {
-  const directory = event.directory.trim();
-  if (!directory) return;
-  const worktreeForDirectory = projectDirectory.value?.trim() || directory;
-  if (event.branch) {
-    graphForWrite.setSandboxBranch(directory, event.branch);
-  }
-  graphForWrite.ensureSandbox(worktreeForDirectory, directory);
-  markSessionGraphChanged();
+async function createSessionInDirectory(directory: string, worktreeHint?: string) {
+  const session = (await opencodeApi.createSession(directory)) as SessionInfo;
+  if (!session?.id) return undefined;
+  serverState.notifySessionMutated(session);
+  const projectId =
+    resolveProjectIdForDirectory(directory) ||
+    resolveProjectIdForDirectory(worktreeHint) ||
+    selectedProjectId.value;
+  await switchSessionSelection(projectId, session.id);
+  return session;
 }
 
 async function createWorktree() {
@@ -2352,16 +2215,10 @@ async function createWorktree() {
     return;
   }
   try {
-    const data = (await opencodeApi.createWorktree(
-      credentials.baseUrl.value,
-      projectDirectory.value,
-    )) as WorktreeInfo;
+    const data = (await opencodeApi.createWorktree(projectDirectory.value)) as WorktreeInfo;
     if (data && typeof data.directory === 'string') {
-      graphForWrite.ensureSandbox(projectDirectory.value, data.directory);
-      markSessionGraphChanged();
-      activeDirectory.value = data.directory;
+      await createSessionInDirectory(data.directory);
     }
-    void fetchWorktrees(projectDirectory.value || undefined);
   } catch (error) {
     worktreeError.value = `Worktree create failed: ${toErrorMessage(error)}`;
   }
@@ -2375,34 +2232,10 @@ async function createWorktreeFromWorktree(worktree: string) {
     return;
   }
   try {
-    const data = (await opencodeApi.createWorktree(
-      credentials.baseUrl.value,
-      worktree,
-    )) as WorktreeInfo;
+    const data = (await opencodeApi.createWorktree(worktree)) as WorktreeInfo;
     if (data && typeof data.directory === 'string') {
-      graphForWrite.ensureSandbox(worktree, data.directory);
-      markSessionGraphChanged();
-      projectDirectory.value = worktree;
-      activeDirectory.value = data.directory;
-
-      try {
-        const session = (await opencodeApi.createSession(
-          credentials.baseUrl.value,
-          data.directory,
-        )) as SessionInfo;
-        if (session && typeof session.id === 'string') {
-          upsertSessionGraph(session);
-          selectedSessionId.value = session.id;
-          if (session.projectID) {
-            graphForWrite.setSandboxProjectID(data.directory, session.projectID);
-            markSessionGraphChanged();
-          }
-        }
-      } catch (sessionCreateError) {
-        sessionError.value = `Session create failed: ${toErrorMessage(sessionCreateError)}`;
-      }
+      await createSessionInDirectory(data.directory, worktree);
     }
-    void fetchWorktrees(worktree || undefined);
   } catch (error) {
     worktreeError.value = `Worktree create failed: ${toErrorMessage(error)}`;
   }
@@ -2420,9 +2253,10 @@ async function deleteWorktree(directory: string) {
   const targetDir = directory.replace(/\/+$/, '');
   if (baseDir && targetDir === baseDir) return;
   try {
-    await opencodeApi.deleteWorktree(credentials.baseUrl.value, projectDirectory.value, targetDir);
-    if (normalizeDirectory(activeDirectory.value) === targetDir) activeDirectory.value = '';
-    void fetchWorktrees(projectDirectory.value || undefined);
+    await opencodeApi.deleteWorktree(projectDirectory.value, targetDir);
+    if (normalizeDirectory(activeDirectory.value) === targetDir) {
+      selectedKey.value = { projectId: selectedProjectId.value, sessionId: '' };
+    }
   } catch (error) {
     worktreeError.value = `Worktree delete failed: ${toErrorMessage(error)}`;
   }
@@ -2437,23 +2271,14 @@ async function createNewSession(): Promise<SessionInfo | undefined> {
   sessionError.value = '';
   try {
     const data = (await opencodeApi.createSession(
-      credentials.baseUrl.value,
       activeDirectory.value || undefined,
     )) as SessionInfo;
     if (data && typeof data.id === 'string') {
-      const matchesDirectory =
-        !data.directory ||
-        data.directory === activeDirectory.value ||
-        !activeDirectory.value;
-      if (matchesDirectory) {
-        upsertSessionGraph(data);
-      }
-      selectedSessionId.value = data.id;
-      if (data.projectID) {
-        graphForWrite.setSandboxProjectID(activeDirectory.value || data.directory || '', data.projectID);
-        markSessionGraphChanged();
-      }
-      if (data.directory) activeDirectory.value = data.directory;
+      serverState.notifySessionMutated(data);
+      const nextProjectId =
+        resolveProjectIdForDirectory(data.directory || activeDirectory.value) ||
+        selectedProjectId.value;
+      await switchSessionSelection(nextProjectId, data.id);
     }
     return data;
   } catch (error) {
@@ -2463,12 +2288,11 @@ async function createNewSession(): Promise<SessionInfo | undefined> {
 }
 
 async function handleNewSessionInSandbox(payload: { worktree: string; directory: string }) {
-  projectDirectory.value = payload.worktree;
-  activeDirectory.value = payload.directory;
-  await createNewSession();
+  await createSessionInDirectory(payload.directory, payload.worktree);
 }
 
 function handleTopPanelSessionSelect(payload: {
+  projectId?: string;
   worktree: string;
   directory: string;
   sessionId: string;
@@ -2480,10 +2304,12 @@ function handleTopPanelSessionSelect(payload: {
   ) {
     return;
   }
-  projectDirectory.value = payload.worktree;
-  activeDirectory.value = payload.directory;
-  selectedSessionId.value = payload.sessionId;
-  removePendingNotification(`idle:${payload.sessionId}`);
+  const projectId =
+    payload.projectId ||
+    resolveProjectIdForDirectory(payload.directory) ||
+    resolveProjectIdForDirectory(payload.worktree) ||
+    selectedProjectId.value;
+  void switchSessionSelection(projectId, payload.sessionId);
 }
 
 function selectSessionById(sessionId: string) {
@@ -2493,7 +2319,9 @@ function selectSessionById(sessionId: string) {
     targetSessionId = parentMap.get(targetSessionId) ?? targetSessionId;
   }
   const worktreeEntry = topPanelTreeData.value.find((worktree) =>
-    worktree.sandboxes.some((sandbox) => sandbox.sessions.some((session) => session.id === targetSessionId)),
+    worktree.sandboxes.some((sandbox) =>
+      sandbox.sessions.some((session) => session.id === targetSessionId),
+    ),
   );
   if (!worktreeEntry) return;
   const sandboxEntry = worktreeEntry.sandboxes.find((sandbox) =>
@@ -2501,6 +2329,7 @@ function selectSessionById(sessionId: string) {
   );
   if (!sandboxEntry) return;
   handleTopPanelSessionSelect({
+    projectId: worktreeEntry.projectId,
     worktree: worktreeEntry.directory,
     directory: sandboxEntry.directory,
     sessionId: targetSessionId,
@@ -2508,11 +2337,12 @@ function selectSessionById(sessionId: string) {
 }
 
 function handleNotificationSessionSelect() {
-  const queue = notificationSessionOrder.value.filter((sessionId) =>
-    pendingNotificationsBySessionId.value.has(sessionId),
+  const queue = notificationSessionOrder.value.filter(
+    (sessionId) => (serverState.notifications[sessionId]?.length ?? 0) > 0,
   );
   if (queue.length === 0) return;
-  const nextSessionId = queue.find((sessionId) => sessionId !== selectedSessionId.value) ?? queue[0];
+  const nextSessionId =
+    queue.find((sessionId) => sessionId !== selectedSessionId.value) ?? queue[0];
   if (!nextSessionId) return;
   selectSessionById(nextSessionId);
 }
@@ -2523,11 +2353,12 @@ async function deleteSession(sessionId: string) {
   if (!sessionId) return;
   try {
     const directory = activeDirectory.value.trim();
-    await opencodeApi.deleteSession(credentials.baseUrl.value, sessionId, directory || undefined);
-    if (selectedSessionId.value === sessionId) selectedSessionId.value = '';
+    await opencodeApi.deleteSession(sessionId, directory || undefined);
+    if (selectedSessionId.value === sessionId) {
+      selectedKey.value = { projectId: selectedProjectId.value, sessionId: '' };
+    }
     clearNotificationSession(sessionId);
-    removeSessionFromGraph(sessionId);
-    deleteSessionStatus(sessionId, selectedProjectId.value);
+    serverState.notifySessionRemoved(sessionId, selectedProjectId.value || undefined);
     if (!selectedSessionId.value && pickPreferredSessionId(filteredSessions.value) === '') {
       await createNewSession();
     }
@@ -2543,15 +2374,16 @@ async function archiveSession(sessionId: string) {
   try {
     const directory = activeDirectory.value.trim();
     const data = (await opencodeApi.updateSession(
-      credentials.baseUrl.value,
       sessionId,
       { time: { archived: Date.now() } },
       directory || undefined,
     )) as SessionInfo;
     if (data && typeof data.id === 'string') {
-      upsertSessionGraph(data);
+      serverState.notifySessionMutated(data);
     }
-    if (selectedSessionId.value === sessionId) selectedSessionId.value = '';
+    if (selectedSessionId.value === sessionId) {
+      selectedKey.value = { projectId: selectedProjectId.value, sessionId: '' };
+    }
     if (!selectedSessionId.value && pickPreferredSessionId(filteredSessions.value) === '') {
       await createNewSession();
     }
@@ -2566,20 +2398,14 @@ async function handleForkMessage(payload: { sessionId: string; messageId: string
   try {
     sendStatus.value = 'Forking...';
     const data = (await opencodeApi.forkSession(
-      credentials.baseUrl.value,
       payload.sessionId,
       payload.messageId,
       activeDirectory.value.trim() || undefined,
     )) as SessionInfo;
     if (data && typeof data.id === 'string') {
-      upsertSessionGraph(data);
+      serverState.notifySessionMutated(data);
       seedForkedSessionComposerDraft(payload, data);
-      if (data.projectID) {
-        graphForWrite.setSandboxProjectID(activeDirectory.value || data.directory || '', data.projectID);
-        markSessionGraphChanged();
-      }
-      if (data.directory) activeDirectory.value = data.directory;
-      selectedSessionId.value = data.id;
+      await switchSessionSelection(data.projectID || selectedProjectId.value, data.id);
     }
     sendStatus.value = 'Forked.';
   } catch (error) {
@@ -2593,7 +2419,6 @@ async function handleRevertMessage(payload: { sessionId: string; messageId: stri
   try {
     sendStatus.value = 'Reverting...';
     await opencodeApi.revertSession(
-      credentials.baseUrl.value,
       payload.sessionId,
       payload.messageId,
       activeDirectory.value.trim() || undefined,
@@ -2608,7 +2433,7 @@ async function handleRevertMessage(payload: { sessionId: string; messageId: stri
 /** Set project name from package.json for newly created projects (fire-and-forget). */
 async function initProjectNameFromPackageJson(projectId: string, directory: string) {
   try {
-    const result = (await opencodeApi.readFileContent(credentials.baseUrl.value, {
+    const result = (await opencodeApi.readFileContent({
       directory,
       path: 'package.json',
     })) as FileContentResponse | string;
@@ -2622,13 +2447,11 @@ async function initProjectNameFromPackageJson(projectId: string, directory: stri
     const parsed = JSON.parse(decoded);
     const name = parsed?.name;
     if (typeof name !== 'string' || !name.trim()) return;
-    const updated = await opencodeApi.updateProject(
-      credentials.baseUrl.value,
-      projectId,
-      { directory, name: name.trim() },
-    );
+    const updated = await opencodeApi.updateProject(projectId, { directory, name: name.trim() });
     if (updated && typeof updated === 'object') {
-      upsertProject(updated as ProjectInfo);
+      serverState.notifyProjectMutated(
+        updated as Parameters<typeof serverState.notifyProjectMutated>[0],
+      );
     }
   } catch {
     // Silently ignore - package.json may not exist or be invalid
@@ -2640,206 +2463,63 @@ async function handleProjectDirectorySelect(directory: string) {
   if (!directory) return;
 
   // Check if this is a new project (no existing project with matching worktree)
-  const isNewProject = !Object.values(projectMetaById.value)
-    .some((p) => p.worktree === directory);
+  const isNewProject = !Object.values(serverState.projects).some((p) => p.worktree === directory);
 
-  projectDirectory.value = directory;
-  activeDirectory.value = directory;
-
-  // Auto-create a session when the opened directory has none
   const list = await listSessionsByDirectory({
     directory,
     instanceDirectory: directory,
     roots: true,
     limit: ROOT_SESSION_BOOTSTRAP_LIMIT,
   });
-  setSessions(list, directory);
+  list.forEach((session) => {
+    serverState.notifySessionMutated(session);
+  });
 
   let session: SessionInfo | undefined;
-  if (!list.some((s) => !s.parentID && !s.time?.archived)) {
-    session = await createNewSession();
+  const roots = list.filter((entry) => !entry.parentID && !entry.time?.archived);
+  const preferred = pickPreferredSessionId(roots);
+  if (preferred) {
+    const projectId = resolveProjectIdForDirectory(directory) || '';
+    await switchSessionSelection(projectId, preferred);
+  } else {
+    session = await createSessionInDirectory(directory);
   }
 
   // For new projects, try to set name from package.json
-  const newProjectId = session?.projectID
-    || sessionGraphStore.value.resolveProjectIDForDirectory(directory);
+  const newProjectId = resolveProjectIdForDirectory(directory);
   if (isNewProject && newProjectId && newProjectId !== 'global') {
     void initProjectNameFromPackageJson(newProjectId, directory);
   }
 }
-
-function collectKnownSandboxDirectories() {
-  const set = new Set<string>();
-  sessionGraphStore.value.getWorktreeList().forEach((worktreeDirectory) => {
-    const normalizedWorktree = worktreeDirectory.trim();
-    if (normalizedWorktree) set.add(normalizedWorktree);
-    sessionGraphStore.value.getSandboxList(worktreeDirectory).forEach((sandboxDirectory) => {
-      const normalizedSandbox = sandboxDirectory.trim();
-      if (normalizedSandbox) set.add(normalizedSandbox);
-    });
-  });
-  const active = activeDirectory.value.trim();
-  if (active) set.add(active);
-  const projectRoot = projectDirectory.value.trim();
-  if (projectRoot) set.add(projectRoot);
-  return Array.from(set);
-}
-
-async function rebuildSessionGraph() {
-  const builder = createSessionGraphStore();
-  builder.importProjectState(sessionGraphStore.value.cloneProjectState());
-  graphForWrite = builder;
-  rebuildingGraph = true;
-
-  try {
-    await Promise.all([
-      rebuildFetchStatuses(builder),
-      rebuildFetchRootsAndChildren(builder),
-    ]);
-  } finally {
-    sessionGraphStore.value = builder;
-    graphForWrite = builder;
-    rebuildingGraph = false;
-    markSessionGraphChanged();
-  }
-}
-
-async function rebuildFetchStatuses(store: ReturnType<typeof createSessionGraphStore>) {
-  const directories = collectKnownSandboxDirectories();
-  await Promise.all(
-    directories.map(async (directory) => {
-      const statusMap = (await opencodeApi.getSessionStatusMap(credentials.baseUrl.value, undefined, {
-        instanceDirectory: directory,
-      })) as Record<string, { type?: string }>;
-      const entries: [string, SessionStatusType][] = [];
-      Object.entries(statusMap ?? {}).forEach(([sessionId, status]) => {
-        const type = typeof status?.type === 'string' ? status.type : '';
-        if (type === 'busy' || type === 'idle' || type === 'retry') {
-          entries.push([sessionId, type as SessionStatusType]);
-        }
-      });
-      const projectID = store.resolveProjectIDForDirectory(directory);
-      if (projectID) {
-        store.fillMissingStatuses(projectID, entries);
-      }
-    }),
-  );
-}
-
-async function rebuildFetchRootsAndChildren(store: ReturnType<typeof createSessionGraphStore>) {
-  const directories = collectKnownSandboxDirectories();
-  const allRoots: { id: string; directory: string; projectID: string }[] = [];
-  await Promise.all(
-    directories.map(async (directory) => {
-      const roots = await listSessionsByDirectory({
-        directory,
-        instanceDirectory: directory,
-        roots: true,
-        limit: ROOT_SESSION_BOOTSTRAP_LIMIT,
-      });
-      const projectID = store.resolveProjectIDForDirectory(directory);
-      for (const session of roots) {
-        if (session.projectID && session.directory) {
-          store.setSandboxProjectID(session.directory, session.projectID);
-        }
-        store.mergeSession(session, {
-          projectIDHint: session.projectID || projectID || undefined,
-          directoryHint: directory || undefined,
-          retention: session.parentID ? 'ephemeral' : 'persistent',
-        });
-        allRoots.push({
-          id: session.id,
-          directory: session.directory?.trim() || directory,
-          projectID: session.projectID || projectID || '',
-        });
-      }
-    }),
-  );
-  await Promise.all(
-    allRoots.map(async (root) => {
-      try {
-        const data = (await opencodeApi.getSessionChildren(
-          credentials.baseUrl.value,
-          root.id,
-          undefined,
-          { instanceDirectory: root.directory || undefined },
-        )) as SessionInfo[];
-        if (!Array.isArray(data) || data.length === 0) return;
-        const childDefaults: [string, SessionStatusType][] = [];
-        for (const child of data) {
-          if (!child || typeof child.id !== 'string') continue;
-          const parentId = typeof child.parentID === 'string' ? child.parentID : root.id;
-          store.mergeSession({ ...child, parentID: parentId }, {
-            projectIDHint: root.projectID || undefined,
-            directoryHint: root.directory || undefined,
-            retention: 'ephemeral',
-          });
-          childDefaults.push([child.id, 'idle']);
-        }
-        if (root.projectID && childDefaults.length > 0) {
-          store.fillMissingStatuses(root.projectID, childDefaults);
-        }
-      } catch {
-        // Non-critical: child list unavailable
-      }
-    }),
-  );
-}
-
-function finalizeSelectionAfterBootstrap() {
-  const initialProjectId = initialQuery.projectId.trim();
-  const initialSessionId = initialQuery.sessionId.trim();
-  if (initialProjectId && initialSessionId) {
-    const initialSession = sessionGraphStore.value.getSession(initialSessionId, initialProjectId);
-    const rootDirectory = sessionGraphStore.value.getProjectRootForProject(initialProjectId);
-    if (rootDirectory) projectDirectory.value = rootDirectory;
-    if (initialSession) {
-      const targetDirectory = initialSession.directory?.trim();
-      if (targetDirectory) {
-        activeDirectory.value = targetDirectory;
-      } else if (rootDirectory) {
-        activeDirectory.value = rootDirectory;
-      }
-      selectedSessionId.value = initialSessionId;
-      markSessionGraphChanged();
-      return;
-    }
-    if (rootDirectory) {
-      activeDirectory.value = rootDirectory;
-      markSessionGraphChanged();
-      return;
-    }
-  }
-
-  const defaultRootDirectory = projectDirectory.value || baseWorktreeOptions.value[0] || '';
-  if (defaultRootDirectory) {
-    projectDirectory.value = defaultRootDirectory;
-    if (!activeDirectory.value) activeDirectory.value = defaultRootDirectory;
-  }
-
-  markSessionGraphChanged();
-  const preferredId = pickPreferredSessionId(filteredSessions.value);
-  if (!selectedSessionId.value && preferredId) selectedSessionId.value = preferredId;
-}
-
 async function bootstrapSelections() {
   if (isBootstrapping.value) return;
   isBootstrapping.value = true;
-  bootstrapReady.value = false;
   try {
-    await fetchProjects();
-    await rebuildSessionGraph();
-    finalizeSelectionAfterBootstrap();
-    if (projectDirectory.value) {
-      await fetchWorktrees(projectDirectory.value);
+    if (!serverState.bootstrapped.value) {
+      await new Promise<void>((resolve) => {
+        const stop = watch(
+          bootstrapReady,
+          (ready) => {
+            if (!ready) return;
+            stop();
+            resolve();
+          },
+          { immediate: true },
+        );
+      });
     }
-    if (!activeDirectory.value && worktrees.value.length > 0) {
-      activeDirectory.value = worktrees.value[0] ?? '';
+
+    const initialProjectId = initialQuery.projectId.trim();
+    const initialSessionId = initialQuery.sessionId.trim();
+    if (initialProjectId && initialSessionId) {
+      await switchSessionSelection(initialProjectId, initialSessionId);
+    } else {
+      await initializeSessionSelection();
     }
+
     if (activeDirectory.value) {
       await fetchCommands(activeDirectory.value);
     }
-    bootstrapReady.value = true;
   } finally {
     isBootstrapping.value = false;
     if (activeDirectory.value) {
@@ -2855,7 +2535,7 @@ async function fetchProviders(force = false) {
   providersFetchCount.value += 1;
   log('providers fetch start', providersFetchCount.value);
   try {
-    const data = (await opencodeApi.listProviders(credentials.baseUrl.value)) as ProviderResponse;
+    const data = (await opencodeApi.listProviders()) as ProviderResponse;
     providers.value = Array.isArray(data.providers) ? data.providers : [];
     const models: Array<{
       id: string;
@@ -2936,7 +2616,7 @@ async function fetchAgents() {
   if (agentsLoading.value) return;
   agentsLoading.value = true;
   try {
-    const data = (await opencodeApi.listAgents(credentials.baseUrl.value)) as AgentInfo[];
+    const data = (await opencodeApi.listAgents()) as AgentInfo[];
     agents.value = Array.isArray(data) ? data : [];
     const options = agents.value
       .filter((agent) => agent.mode === 'primary' || agent.mode === 'all')
@@ -2970,7 +2650,7 @@ async function fetchCommands(directory?: string) {
   if (commandsLoading.value) return;
   commandsLoading.value = true;
   try {
-    const data = (await opencodeApi.listCommands(credentials.baseUrl.value, directory)) as CommandInfo[];
+    const data = (await opencodeApi.listCommands(directory)) as CommandInfo[];
     const list = Array.isArray(data) ? data : [];
     list.sort((a, b) => a.name.localeCompare(b.name));
     commands.value = list;
@@ -2983,7 +2663,7 @@ async function fetchCommands(directory?: string) {
 
 async function fetchPendingPermissions(directory?: string) {
   try {
-    const data = await opencodeApi.listPendingPermissions(credentials.baseUrl.value, directory);
+    const data = await opencodeApi.listPendingPermissions(directory);
     if (!Array.isArray(data)) return;
     data
       .map((entry) => parsePermissionRequest(entry))
@@ -2999,7 +2679,7 @@ async function fetchPendingPermissions(directory?: string) {
 
 async function fetchPendingQuestions(directory?: string) {
   try {
-    const data = await opencodeApi.listPendingQuestions(credentials.baseUrl.value, directory);
+    const data = await opencodeApi.listPendingQuestions(directory);
     if (!Array.isArray(data)) return;
     data
       .map((entry) => parseQuestionRequest(entry))
@@ -3015,11 +2695,6 @@ async function fetchPendingQuestions(directory?: string) {
 
 function clearNotificationSession(sessionId: string) {
   if (!sessionId) return;
-  if (pendingNotificationsBySessionId.value.has(sessionId)) {
-    const next = new Map(pendingNotificationsBySessionId.value);
-    next.delete(sessionId);
-    pendingNotificationsBySessionId.value = next;
-  }
   notificationSessionOrder.value = notificationSessionOrder.value.filter((id) => id !== sessionId);
 }
 
@@ -3037,11 +2712,16 @@ function showBrowserNotification(sessionId: string, type: 'permission' | 'questi
   if (!document.hidden) return;
   if (Notification.permission !== 'granted') return;
   const session = sessions.value.find((entry) => entry.id === sessionId);
-  const kind = type === 'permission' ? 'Permission' : type === 'question' ? 'Question' : 'Session idle';
+  const kind =
+    type === 'permission' ? 'Permission' : type === 'question' ? 'Question' : 'Session idle';
   const body =
     type === 'idle'
-      ? session ? `${sessionLabel(session)} is now idle.` : `Session ${sessionId} is now idle.`
-      : session ? `${sessionLabel(session)} requires your response.` : `Session ${sessionId} requires your response.`;
+      ? session
+        ? `${sessionLabel(session)} is now idle.`
+        : `Session ${sessionId} is now idle.`
+      : session
+        ? `${sessionLabel(session)} requires your response.`
+        : `Session ${sessionId} requires your response.`;
   const notification = new Notification(`${kind}`, {
     body,
     tag: `vis-${type}-${sessionId}`,
@@ -3053,80 +2733,26 @@ function showBrowserNotification(sessionId: string, type: 'permission' | 'questi
   };
 }
 
-function addPendingNotification(sessionId: string, requestId: string, type: 'permission' | 'question' | 'idle') {
-  if (!sessionId || !requestId) return;
-  const session = sessionGraphStore.value.getSession(
-    sessionId,
-    resolveProjectIdForSession(sessionId) || undefined,
-  );
-  if (!session || session.parentID) return;
-  ensureBrowserNotificationPermission();
-  const next = new Map(pendingNotificationsBySessionId.value);
-  const requestSet = new Set(next.get(sessionId) ?? []);
-  const wasPresent = requestSet.has(requestId);
-  requestSet.add(requestId);
-  next.set(sessionId, requestSet);
-  pendingNotificationsBySessionId.value = next;
-  if (!notificationSessionOrder.value.includes(sessionId)) {
-    notificationSessionOrder.value = [...notificationSessionOrder.value, sessionId];
-  }
-  if (!wasPresent) {
-    showBrowserNotification(sessionId, type);
-  }
-}
-
-function removePendingNotification(requestId: string) {
-  if (!requestId) return;
-  const next = new Map(pendingNotificationsBySessionId.value);
-  for (const [sessionId, requestSet] of next.entries()) {
-    if (!requestSet.has(requestId)) continue;
-    const updatedSet = new Set(requestSet);
-    updatedSet.delete(requestId);
-    if (updatedSet.size === 0) {
-      next.delete(sessionId);
-      notificationSessionOrder.value = notificationSessionOrder.value.filter((id) => id !== sessionId);
-    } else {
-      next.set(sessionId, updatedSet);
-    }
-    pendingNotificationsBySessionId.value = next;
+function syncActiveSelectionToWorker() {
+  if (typeof document !== 'undefined' && document.hidden) {
+    ge.sendToWorker({
+      type: 'selection.active',
+      projectId: '',
+      sessionId: '',
+    });
     return;
   }
+  const projectId = selectedProjectId.value.trim();
+  const sessionId = selectedSessionId.value.trim();
+  ge.sendToWorker({
+    type: 'selection.active',
+    projectId,
+    sessionId,
+  });
 }
 
-function reconcilePendingNotifications() {
-  notificationSessionOrder.value = notificationSessionOrder.value.filter((sessionId) =>
-    pendingNotificationsBySessionId.value.has(sessionId),
-  );
-}
-
-async function fetchAllPendingNotifications(directory?: string) {
-  try {
-    const permissionData = await opencodeApi.listPendingPermissions(credentials.baseUrl.value, directory);
-    if (Array.isArray(permissionData)) {
-      permissionData
-        .map((entry) => parsePermissionRequest(entry))
-        .filter((entry): entry is PermissionRequest => Boolean(entry))
-        .forEach((entry) => {
-          addPendingNotification(entry.sessionID, entry.id, 'permission');
-        });
-    }
-  } catch (error) {
-    log('Pending permission notifications failed', error);
-  }
-  try {
-    const questionData = await opencodeApi.listPendingQuestions(credentials.baseUrl.value, directory);
-    if (Array.isArray(questionData)) {
-      questionData
-        .map((entry) => parseQuestionRequest(entry))
-        .filter((entry): entry is QuestionRequest => Boolean(entry))
-        .forEach((entry) => {
-          addPendingNotification(entry.sessionID, entry.id, 'question');
-        });
-    }
-  } catch (error) {
-    log('Pending question notifications failed', error);
-  }
-  reconcilePendingNotifications();
+function handleDocumentVisibilityChange() {
+  syncActiveSelectionToWorker();
 }
 
 type UserMessageMeta = {
@@ -3217,7 +2843,8 @@ function computeContextPercent(tokens: MessageTokens, providerId?: string, model
   const limit = resolveProviderModelLimit(providerId, modelId);
   const contextLimit = limit?.context;
   if (!contextLimit || !Number.isFinite(contextLimit) || contextLimit <= 0) return null;
-  const total = tokens.total ?? (tokens.input + tokens.output + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0));
+  const total =
+    tokens.input + tokens.output + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0);
   if (!Number.isFinite(total) || total <= 0) return 0;
   return Math.round((total / contextLimit) * 100);
 }
@@ -3393,8 +3020,10 @@ function resolveUserMessageMetaForMessage(
   meta?: UserMessageMeta | null,
 ): UserMessageMeta | null {
   if (meta) return meta;
-  if (messageId && userMessageMetaById.value[messageId]) return userMessageMetaById.value[messageId];
-  if (fallbackId && userMessageMetaById.value[fallbackId]) return userMessageMetaById.value[fallbackId];
+  if (messageId && userMessageMetaById.value[messageId])
+    return userMessageMetaById.value[messageId];
+  if (fallbackId && userMessageMetaById.value[fallbackId])
+    return userMessageMetaById.value[fallbackId];
   return null;
 }
 
@@ -3404,8 +3033,10 @@ function resolveUserMessageTimeForMessage(
   messageTime?: number,
 ): number | undefined {
   if (typeof messageTime === 'number') return messageTime;
-  if (messageId && userMessageTimeById.value[messageId] !== undefined) return userMessageTimeById.value[messageId];
-  if (fallbackId && userMessageTimeById.value[fallbackId] !== undefined) return userMessageTimeById.value[fallbackId];
+  if (messageId && userMessageTimeById.value[messageId] !== undefined)
+    return userMessageTimeById.value[messageId];
+  if (fallbackId && userMessageTimeById.value[fallbackId] !== undefined)
+    return userMessageTimeById.value[fallbackId];
   return undefined;
 }
 
@@ -3415,7 +3046,7 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
   const requestedDirectory = !isSubagentMessage ? getSelectedWorktreeDirectory() : '';
   try {
     const directory = getSelectedWorktreeDirectory();
-    const data = (await opencodeApi.listSessionMessages(credentials.baseUrl.value, sessionId, {
+    const data = (await opencodeApi.listSessionMessages(sessionId, {
       directory: directory || undefined,
     })) as Array<Record<string, unknown>>;
     if (!Array.isArray(data)) return;
@@ -3445,7 +3076,7 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
 }
 
 function buildPtyWsUrl(path: string, directory?: string) {
-  return opencodeApi.createWsUrl(credentials.baseUrl.value, path, { directory });
+  return opencodeApi.createWsUrl(path, { directory });
 }
 
 function parsePtyInfo(value: unknown): PtyInfo | null {
@@ -3464,14 +3095,14 @@ function parsePtyInfo(value: unknown): PtyInfo | null {
 }
 
 async function fetchPtyList(directory?: string) {
-  const data = await opencodeApi.listPtys(credentials.baseUrl.value, directory);
+  const data = await opencodeApi.listPtys(directory);
   if (!Array.isArray(data)) return [] as PtyInfo[];
   return data.map(parsePtyInfo).filter((pty): pty is PtyInfo => Boolean(pty));
 }
 
 async function createPtySession(command?: string, args?: string[]) {
   const directory = activeDirectory.value || undefined;
-  const data = await opencodeApi.createPty(credentials.baseUrl.value, {
+  const data = await opencodeApi.createPty({
     directory,
     command,
     args,
@@ -3482,7 +3113,7 @@ async function createPtySession(command?: string, args?: string[]) {
 }
 
 async function updatePtySize(ptyId: string, rows: number, cols: number, directory?: string) {
-  const data = await opencodeApi.updatePtySize(credentials.baseUrl.value, ptyId, {
+  const data = await opencodeApi.updatePtySize(ptyId, {
     directory,
     rows,
     cols,
@@ -3571,7 +3202,7 @@ function resizeWindowToFitTerminal(key: string, terminal: Terminal, _host: HTMLE
   if (session) notifyPtySize(session);
 }
 
-  function scheduleShellFitAll() {
+function scheduleShellFitAll() {
   shellSessionsByPtyId.forEach((_, ptyId) => {
     scheduleShellFit(ptyId);
   });
@@ -3638,21 +3269,22 @@ function scheduleShellFit(ptyId: string) {
     pendingShellFits.delete(ptyId);
     const session = shellSessionsByPtyId.get(ptyId);
     if (!session) return;
+    const currentSession = session;
 
     let prevCols = -1;
     let prevRows = -1;
     let attempts = 0;
 
     function tick() {
-      if (attempts >= 30 || !session.terminal.element?.isConnected) {
-        notifyPtySize(session);
+      if (attempts >= 30 || !currentSession.terminal.element?.isConnected) {
+        notifyPtySize(currentSession);
         return;
       }
       attempts++;
-      fitTerminalToContainer(session);
-      const { cols, rows } = session.terminal;
+      fitTerminalToContainer(currentSession);
+      const { cols, rows } = currentSession.terminal;
       if (cols === prevCols && rows === prevRows) {
-        notifyPtySize(session);
+        notifyPtySize(currentSession);
         return;
       }
       prevCols = cols;
@@ -3679,7 +3311,11 @@ function connectShellSocket(ptyId: string) {
         const json = ptyMetaDecoder.decode(bytes.subarray(1));
         try {
           const meta = JSON.parse(json) as { cursor?: unknown };
-          if (typeof meta.cursor === 'number' && Number.isSafeInteger(meta.cursor) && meta.cursor >= 0) {
+          if (
+            typeof meta.cursor === 'number' &&
+            Number.isSafeInteger(meta.cursor) &&
+            meta.cursor >= 0
+          ) {
             return;
           }
         } catch {
@@ -3697,11 +3333,11 @@ function connectShellSocket(ptyId: string) {
           const meta = JSON.parse(trimmed) as { cursor?: unknown } & Record<string, unknown>;
           const keys = Object.keys(meta);
           if (
-            keys.length === 1
-            && keys[0] === 'cursor'
-            && typeof meta.cursor === 'number'
-            && Number.isSafeInteger(meta.cursor)
-            && meta.cursor >= 0
+            keys.length === 1 &&
+            keys[0] === 'cursor' &&
+            typeof meta.cursor === 'number' &&
+            Number.isSafeInteger(meta.cursor) &&
+            meta.cursor >= 0
           ) {
             return;
           }
@@ -3733,7 +3369,7 @@ function removeShellWindow(ptyId: string, options?: { kill?: boolean }) {
   fw.close(`shell:${ptyId}`);
   if (options?.kill) {
     const directory = session.pty.cwd || activeDirectory.value || undefined;
-    opencodeApi.deletePty(credentials.baseUrl.value, ptyId, directory).catch((error) => {
+    opencodeApi.deletePty(ptyId, directory).catch((error) => {
       log('PTY delete failed', error);
     });
   }
@@ -3801,21 +3437,23 @@ const DEBUG_SUBCOMMANDS: Record<string, string> = {
 };
 
 function formatSessionGraphDump(): string {
-  const data = sessionGraphStore.value.dump();
   const lines: string[] = [];
 
-  lines.push(`Session Graph  (version ${data.version})`);
-  lines.push(`  nodes: ${data.nodeCount}  sessions(unique): ${data.sessionCount}`);
-  lines.push('');
+  const allProjects = Object.values(serverState.projects).sort((a, b) =>
+    a.worktree === b.worktree ? a.id.localeCompare(b.id) : a.worktree.localeCompare(b.worktree),
+  );
+  const totalSessions = allProjects.reduce((count, project) => {
+    return (
+      count +
+      Object.values(project.sandboxes).reduce((projectCount, sandbox) => {
+        return projectCount + Object.keys(sandbox.sessions).length;
+      }, 0)
+    );
+  }, 0);
 
-  // Index nodes by directory
-  const nodesByDir = new Map<string, typeof data.nodes>();
-  for (const node of data.nodes) {
-    const dir = node.directory || '';
-    const group = nodesByDir.get(dir) ?? [];
-    group.push(node);
-    nodesByDir.set(dir, group);
-  }
+  lines.push('Project Tree (worker-state)');
+  lines.push(`  projects: ${allProjects.length}  sessions(total): ${totalSessions}`);
+  lines.push('');
 
   function fmtTime(ts?: number) {
     if (!ts) return '-';
@@ -3829,64 +3467,58 @@ function formatSessionGraphDump(): string {
     return `[${s}]`;
   }
 
-  function printSession(node: (typeof data.nodes)[0], childrenOf: Map<string, typeof data.nodes>, prefix: string, isLast: boolean) {
-    const connector = isLast ? '└── ' : '├── ';
-    const status = fmtStatus(node.status);
-    const retention = node.retention === 'ephemeral' ? ' (ephemeral)' : '';
-    const title = node.title ? `  "${node.title}"` : '';
-    const slug = node.slug ? `  slug=${node.slug}` : '';
-    lines.push(`${prefix}${connector}${node.sessionID}  ${status}${retention}${title}${slug}`);
+  for (const project of allProjects) {
+    lines.push(`PROJECT ${project.id}`);
+    lines.push(`  worktree: ${project.worktree || '-'}`);
+    if (project.name) lines.push(`  name: ${project.name}`);
+    if (project.color) lines.push(`  color: ${project.color}`);
+    lines.push(
+      `  time: created=${fmtTime(project.time?.created)} updated=${fmtTime(project.time?.updated)} initialized=${fmtTime(project.time?.initialized)}`,
+    );
 
-    const detail = `${prefix}${isLast ? '    ' : '│   '}`;
-    lines.push(`${detail}created: ${fmtTime(node.timeCreated)}  updated: ${fmtTime(node.timeUpdated)}`);
-
-    const children = childrenOf.get(node.sessionID) ?? [];
-    children.sort((a, b) => (b.timeUpdated ?? 0) - (a.timeUpdated ?? 0));
-    for (let i = 0; i < children.length; i++) {
-      printSession(children[i], childrenOf, `${prefix}${isLast ? '    ' : '│   '}`, i === children.length - 1);
+    const sandboxEntries = Object.entries(project.sandboxes).sort(([a], [b]) => a.localeCompare(b));
+    if (sandboxEntries.length === 0) {
+      lines.push('  (no sandboxes)');
+      lines.push('');
+      continue;
     }
-  }
 
-  // Walk tree: worktree -> sandbox -> sessions
-  const worktrees = Object.keys(data.tree).sort();
-  for (const worktree of worktrees) {
-    lines.push(`WORKTREE  ${worktree}`);
-    const sandboxes = data.tree[worktree];
-    const sandboxKeys = Object.keys(sandboxes).sort();
-
-    for (let si = 0; si < sandboxKeys.length; si++) {
-      const sandbox = sandboxKeys[si];
-      const info = sandboxes[sandbox];
-      const isLastSandbox = si === sandboxKeys.length - 1;
+    for (let si = 0; si < sandboxEntries.length; si++) {
+      const [sandboxDirectory, sandbox] = sandboxEntries[si];
+      const isLastSandbox = si === sandboxEntries.length - 1;
       const sConnector = isLastSandbox ? '└── ' : '├── ';
       const sPrefix = isLastSandbox ? '    ' : '│   ';
 
-      const meta: string[] = [];
-      if (info.projectID) meta.push(`project: ${info.projectID}`);
-      if (info.branch) meta.push(`branch: ${info.branch}`);
-      const metaStr = meta.length > 0 ? `  (${meta.join(', ')})` : '';
-      lines.push(`${sConnector}${sandbox}${metaStr}`);
+      const branchMeta = sandbox.name ? `  (branch: ${sandbox.name})` : '';
+      lines.push(`${sConnector}SANDBOX ${sandboxDirectory}${branchMeta}`);
+      lines.push(`${sPrefix}rootSessions: [${sandbox.rootSessions.join(', ')}]`);
 
-      // Sessions in this sandbox
-      const nodes = nodesByDir.get(sandbox) ?? [];
-      const childrenOf = new Map<string, typeof data.nodes>();
-      const roots: typeof data.nodes = [];
-      for (const node of nodes) {
-        if (!node.parentID) {
-          roots.push(node);
-        } else {
-          const siblings = childrenOf.get(node.parentID) ?? [];
-          siblings.push(node);
-          childrenOf.set(node.parentID, siblings);
-        }
-      }
-      roots.sort((a, b) => (b.timeUpdated ?? 0) - (a.timeUpdated ?? 0));
+      const sessions = Object.values(sandbox.sessions).sort((a, b) => {
+        const aTime = a.timeUpdated ?? a.timeCreated ?? 0;
+        const bTime = b.timeUpdated ?? b.timeCreated ?? 0;
+        return bTime - aTime;
+      });
 
-      if (roots.length === 0 && info.sessionCount === 0) {
+      if (sessions.length === 0) {
         lines.push(`${sPrefix}(no sessions)`);
+        continue;
       }
-      for (let i = 0; i < roots.length; i++) {
-        printSession(roots[i], childrenOf, sPrefix, i === roots.length - 1);
+
+      for (let i = 0; i < sessions.length; i++) {
+        const session = sessions[i];
+        const isLastSession = i === sessions.length - 1;
+        const sessionConnector = isLastSession ? '└── ' : '├── ';
+        const sessionPrefix = `${sPrefix}${isLastSession ? '    ' : '│   '}`;
+        const status = fmtStatus(session.status ?? 'unknown');
+        const title = session.title ? `  "${session.title}"` : '';
+        const slug = session.slug ? `  slug=${session.slug}` : '';
+        lines.push(`${sPrefix}${sessionConnector}${session.id}  ${status}${title}${slug}`);
+        lines.push(
+          `${sessionPrefix}dir=${session.directory || sandboxDirectory}  parent=${session.parentID || '(root)'}  archived=${fmtTime(session.timeArchived)}`,
+        );
+        lines.push(
+          `${sessionPrefix}created=${fmtTime(session.timeCreated)}  updated=${fmtTime(session.timeUpdated)}`,
+        );
       }
     }
 
@@ -3923,12 +3555,12 @@ function openDebugSessionViewer() {
 
 function formatNotificationDump(): string {
   const lines: string[] = [];
-  const map = pendingNotificationsBySessionId.value;
+  const map = serverState.notifications;
   const order = notificationSessionOrder.value;
   const parentMap = sessionParentById.value;
 
   lines.push(`Notification State`);
-  lines.push(`  pendingNotificationsBySessionId: ${map.size} session(s)`);
+  lines.push(`  pendingNotificationsBySessionId: ${Object.keys(map).length} session(s)`);
   lines.push(`  notificationSessionOrder: [${order.length}] ${order.join(', ') || '(empty)'}`);
   lines.push(`  selectedSessionId: ${selectedSessionId.value || '(none)'}`);
   lines.push(`  allowedSessionIds: [${allowedSessionIds.value.size}]`);
@@ -3936,7 +3568,9 @@ function formatNotificationDump(): string {
 
   // Computed notificationSessions (what TopPanel sees)
   const computed = notificationSessions.value;
-  lines.push(`Computed notificationSessions (TopPanel badge): ${computed.length} entry(s), total count = ${computed.reduce((s, e) => s + e.count, 0)}`);
+  lines.push(
+    `Computed notificationSessions (TopPanel badge): ${computed.length} entry(s), total count = ${computed.reduce((s, e) => s + e.count, 0)}`,
+  );
   for (const entry of computed) {
     const session = sessions.value.find((s) => s.id === entry.sessionId);
     const label = session ? sessionLabel(session) : '(unknown session)';
@@ -3948,10 +3582,10 @@ function formatNotificationDump(): string {
 
   // Full map dump
   lines.push(`Full pendingNotificationsBySessionId:`);
-  if (map.size === 0) {
+  if (Object.keys(map).length === 0) {
     lines.push('  (empty)');
   }
-  for (const [sessionId, requestIds] of map.entries()) {
+  for (const [sessionId, requestIds] of Object.entries(map)) {
     const session = sessions.value.find((s) => s.id === sessionId);
     const label = session ? sessionLabel(session) : '(unknown session)';
     const parentId = parentMap.get(sessionId);
@@ -3973,8 +3607,9 @@ function formatNotificationDump(): string {
   lines.push('');
 
   // Order vs Map consistency check
-  const orphanedInOrder = order.filter((id) => !map.has(id));
-  const missingFromOrder = Array.from(map.keys()).filter((id) => !order.includes(id));
+  const mapKeys = Object.keys(map);
+  const orphanedInOrder = order.filter((id) => !mapKeys.includes(id));
+  const missingFromOrder = mapKeys.filter((id) => !order.includes(id));
   if (orphanedInOrder.length > 0 || missingFromOrder.length > 0) {
     lines.push(`Consistency Issues:`);
     if (orphanedInOrder.length > 0) {
@@ -4049,12 +3684,10 @@ function runDebugCommand(args: string): { ok: boolean; message: string } {
   return { ok: false, message: `Unknown debug subcommand: ${sub}. Type /debug help for a list.` };
 }
 
-
-
 async function sendCommand(sessionId: string, command: CommandInfo, commandArgs: string) {
   if (!ensureConnectionReady('Sending commands')) return;
   const directory = activeDirectory.value.trim();
-  await opencodeApi.sendCommand(credentials.baseUrl.value, sessionId, {
+  await opencodeApi.sendCommand(sessionId, {
     directory: directory || undefined,
     command: command.name,
     arguments: commandArgs,
@@ -4081,7 +3714,7 @@ async function sendMessage() {
       sendStatus.value = 'No session selected.';
       return;
     }
-    selectedSessionId.value = fallback.id;
+    selectedKey.value = { projectId: selectedProjectId.value, sessionId: fallback.id };
     sessionId = fallback.id;
   }
   const slash = hasText ? parseSlashCommand(text) : null;
@@ -4131,7 +3764,7 @@ async function sendMessage() {
         })),
       );
     }
-    await opencodeApi.sendPromptAsync(credentials.baseUrl.value, sessionId, {
+    await opencodeApi.sendPromptAsync(sessionId, {
       directory,
       agent: selectedMode.value,
       model: {
@@ -4158,7 +3791,13 @@ const DOUBLE_CTRL_G_THRESHOLD = 500;
 
 function handleGlobalKeydown(event: KeyboardEvent) {
   // Ctrl-A: select all content in focused div (floating window body)
-  if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
+  if (
+    event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === 'a'
+  ) {
     const active = document.activeElement;
     if (active instanceof HTMLDivElement) {
       event.stopPropagation();
@@ -4238,9 +3877,9 @@ async function abortSession() {
     const directory = activeDirectory.value.trim();
     const busyDescendants = busyDescendantSessionIds.value;
     const abortPromises = [
-      opencodeApi.abortSession(credentials.baseUrl.value, sessionId, directory || undefined),
+      opencodeApi.abortSession(sessionId, directory || undefined),
       ...busyDescendants.map((sid) =>
-        opencodeApi.abortSession(credentials.baseUrl.value, sid, directory || undefined).catch(() => {}),
+        opencodeApi.abortSession(sid, directory || undefined).catch(() => {}),
       ),
     ];
     await Promise.all(abortPromises);
@@ -4275,30 +3914,12 @@ watch(
     // pd/ad が変わったが sid も同時に変わった場合 = 意図的な一括選択 → クリアしない
     // pd/ad だけ変わった場合 = ディレクトリ切り替え → sid をクリア
     if (!sidChanged) {
-      selectedSessionId.value = '';
-    }
-
-    markSessionGraphChanged();
-
-    if (pdChanged) {
-      void fetchWorktrees(pd || undefined);
+      selectedKey.value = { projectId: pd || selectedProjectId.value, sessionId: '' };
     }
 
     if (adChanged && ad) {
       void fetchCommands(ad);
     }
-  },
-  { immediate: true },
-);
-
-watch(
-  worktrees,
-  (list) => {
-    // Auto-select activeDirectory if current is not in list
-    if (isBootstrapping.value) return;
-    if (list.length === 0) return;
-    if (activeDirectory.value && list.includes(activeDirectory.value)) return;
-    activeDirectory.value = list[0] ?? '';
   },
   { immediate: true },
 );
@@ -4311,23 +3932,19 @@ watch(
     if (filteredSessions.value.length === 0) return;
     const preferredId = pickPreferredSessionId(filteredSessions.value);
     if (!selectedSessionId.value) {
-      if (preferredId) selectedSessionId.value = preferredId;
+      if (preferredId) {
+        selectedKey.value = { projectId: selectedProjectId.value, sessionId: preferredId };
+      }
       return;
     }
     const isValid = filteredSessions.value.some(
       (session) => session.id === selectedSessionId.value,
     );
     if (!isValid) {
-      if (preferredId) selectedSessionId.value = preferredId;
+      if (preferredId) {
+        selectedKey.value = { projectId: selectedProjectId.value, sessionId: preferredId };
+      }
     }
-  },
-  { immediate: true },
-);
-
-watch(
-  sessions,
-  () => {
-    reconcilePendingNotifications();
   },
   { immediate: true },
 );
@@ -4376,27 +3993,21 @@ async function reloadSelectedSessionState() {
   nextTick(() => inputPanelRef.value?.focus());
 }
 
-function pruneIdleEphemeralSessions() {
-  const keep = new Set<string>(allowedSessionIds.value);
-  const changed = graphForWrite.pruneEphemeralChildren(CHILD_SESSION_PRUNE_TTL_MS, keep);
-  if (changed) markSessionGraphChanged();
-}
-
 watch(
   [selectedProjectId, selectedSessionId],
   ([projectId, sessionId], previous) => {
     const [prevProjectId, prevSessionId] = previous ?? ['', ''];
     const contextKey = buildComposerContextKey(projectId, sessionId);
-  const prevContextKey = buildComposerContextKey(prevProjectId ?? '', prevSessionId ?? '');
-  if (contextKey === prevContextKey) return;
-  clearComposerInputState();
-  nextTick(() => {
-    inputPanelRef.value?.reset();
-  });
-  if (!contextKey) return;
-  const hadDraft = restoreComposerDraftForContext(contextKey);
-  if (!hadDraft) resolveDefaultAgentModel();
-},
+    const prevContextKey = buildComposerContextKey(prevProjectId ?? '', prevSessionId ?? '');
+    if (contextKey === prevContextKey) return;
+    clearComposerInputState();
+    nextTick(() => {
+      inputPanelRef.value?.reset();
+    });
+    if (!contextKey) return;
+    const hadDraft = restoreComposerDraftForContext(contextKey);
+    if (!hadDraft) resolveDefaultAgentModel();
+  },
   { immediate: true },
 );
 
@@ -4486,8 +4097,6 @@ function log(..._args: unknown[]) {}
 
 const shikiTheme = ref('github-dark');
 
-
-
 const TOOL_RENDERER_READ_EVENT_TYPES = new Set(['session.diff', 'file.edited']);
 
 const TOOL_RENDERER_WRITE_EVENT_TYPES = new Set<string>([]);
@@ -4528,7 +4137,12 @@ const toolRendererHelpers = {
   WebContent,
 };
 
-const ge = useGlobalEvents(credentials.baseUrl.value);
+const ge = useGlobalEvents(credentials);
+ge.setWorkerMessageHandler(serverState.handleStateMessage);
+serverState.setWorkerSender(ge.sendToWorker);
+serverState.setNotificationShowHandler((message) => {
+  showBrowserNotification(message.sessionId, message.kind);
+});
 const deltaAccumulator = useDeltaAccumulator();
 deltaAccumulator.listen(ge);
 const sessionScope = ge.session(selectedSessionId, sessionParentRecord);
@@ -4540,17 +4154,18 @@ subagentWindows.bindScope(sessionScope);
 
 watch(selectedSessionId, reloadSelectedSessionState, { immediate: true });
 
-watch(() => credentials.authHeader.value, (authHeader) => {
-  opencodeApi.setDefaultAuthorization(authHeader);
-}, { immediate: true });
+watch(
+  [selectedProjectId, selectedSessionId],
+  () => {
+    syncActiveSelectionToWorker();
+  },
+  { immediate: true },
+);
 
-function matchesSelectedProject(sessionInfo: SessionInfo) {
-  if (!sessionInfo.directory) return true;
-  const sessionDirectory = normalizeDirectory(sessionInfo.directory);
-  const pd = normalizeDirectory(projectDirectory.value || '');
-  const ad = normalizeDirectory(activeDirectory.value || '');
-  return sessionDirectory === ad || sessionDirectory === pd;
-}
+watchEffect(() => {
+  opencodeApi.setBaseUrl(credentials.baseUrl.value);
+  opencodeApi.setAuthorization(credentials.authHeader.value);
+});
 
 function matchesSelectedWorktree(sessionInfo: SessionInfo) {
   const directory = activeDirectory.value.trim();
@@ -4658,7 +4273,7 @@ async function renderReadHtmlFromApi(params: {
   const requestPath = splitFileContentDirectoryAndPath(params.path, directory);
 
   try {
-    const listData = await opencodeApi.listFiles(credentials.baseUrl.value, {
+    const listData = await opencodeApi.listFiles({
       directory: requestPath.directory,
       path: requestPath.path,
     });
@@ -4680,7 +4295,7 @@ async function renderReadHtmlFromApi(params: {
   }
 
   try {
-    const data = (await opencodeApi.readFileContent(credentials.baseUrl.value, {
+    const data = (await opencodeApi.readFileContent({
       directory: requestPath.directory,
       path: requestPath.path,
     })) as FileContentResponse;
@@ -4722,15 +4337,16 @@ function renderEditDiffHtml(params: {
   after?: string;
   lang: string;
 }): () => Promise<string> {
-  return () => renderWorkerHtml({
-    id: `edit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    code: params.code ?? '',
-    after: params.after,
-    patch: params.diff,
-    lang: params.lang,
-    theme: 'github-dark',
-    gutterMode: 'double',
-  });
+  return () =>
+    renderWorkerHtml({
+      id: `edit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      code: params.code ?? '',
+      after: params.after,
+      patch: params.diff,
+      lang: params.lang,
+      theme: 'github-dark',
+      gutterMode: 'double',
+    });
 }
 
 function parsePermissionRequest(
@@ -4894,8 +4510,6 @@ function shouldRenderToolWindow(tool: string) {
   return !TOOL_WINDOW_HIDDEN.has(tool) && TOOL_WINDOW_SUPPORTED.has(tool);
 }
 
-
-
 function parsePatchTextBlocks(patchText: string) {
   const lines = patchText.split('\n');
   const blocks: Array<{ path?: string; content: string }> = [];
@@ -5014,7 +4628,7 @@ async function reloadTodosForAllowedSessions() {
   await Promise.all(
     sessionIds.map(async (id) => {
       try {
-        const data = await opencodeApi.getSessionTodos(credentials.baseUrl.value, id, directory);
+        const data = await opencodeApi.getSessionTodos(id, directory);
         nextTodos[id] = normalizeTodoItems(data);
       } catch (error) {
         nextTodos[id] = [];
@@ -5179,7 +4793,7 @@ async function loadTreePath(path: string) {
     treeError.value = '';
   }
   try {
-    const data = await opencodeApi.listFiles(credentials.baseUrl.value, {
+    const data = await opencodeApi.listFiles({
       directory,
       path,
     });
@@ -5244,7 +4858,7 @@ async function refreshSessionDiff() {
   }
   const directory = activeDirectory.value.trim();
   try {
-    const data = await opencodeApi.getSessionDiff(credentials.baseUrl.value, {
+    const data = await opencodeApi.getSessionDiff({
       sessionID: sessionId,
       directory,
     });
@@ -5396,7 +5010,6 @@ function handleShowMessageDiff(payload: { messageKey: string; diffs: Array<Messa
   });
 }
 
-
 function openToolPartAsWindow(
   toolPart: ToolPart,
   overrides?: Record<string, unknown>,
@@ -5486,14 +5099,18 @@ function handleOpenHistoryTool(payload: { part: ToolPart }) {
   const winH = 400;
   const x = Math.max(0, Math.round((width - winW) / 2));
   const y = Math.max(0, Math.round((height - winH) / 2));
-  const keys = openToolPartAsWindow(payload.part, {
-    closable: true,
-    resizable: true,
-    expiry: Infinity,
-    scroll: 'manual',
-    x,
-    y,
-  }, 'history-tool:');
+  const keys = openToolPartAsWindow(
+    payload.part,
+    {
+      closable: true,
+      resizable: true,
+      expiry: Infinity,
+      scroll: 'manual',
+      x,
+      y,
+    },
+    'history-tool:',
+  );
   for (const key of keys) historyToolWindowKeys.add(key);
 }
 
@@ -5530,7 +5147,14 @@ type ThreadHistoryEntry =
   | { key: string; kind: 'message'; content: string; time: number; agent?: string }
   | { key: string; kind: 'tool'; part: ToolPart; time: number }
   | { key: string; kind: 'reasoning'; part: ReasoningPart; time: number }
-  | { key: string; kind: 'question'; questions: QuestionInfo[]; status: 'pending' | 'replied' | 'rejected'; answers?: string[][]; time: number };
+  | {
+      key: string;
+      kind: 'question';
+      questions: QuestionInfo[];
+      status: 'pending' | 'replied' | 'rejected';
+      answers?: string[][];
+      time: number;
+    };
 
 function handleShowThreadHistory(payload: { entries: ThreadHistoryEntry[] }) {
   const entries = payload.entries;
@@ -5604,7 +5228,7 @@ async function handleEditMessage(payload: { sessionId: string; part: MessagePart
   if (trimmed === payload.part.text) return;
   try {
     const part = { ...payload.part, text: trimmed };
-    await opencodeApi.patchMessagePart(credentials.baseUrl.value, {
+    await opencodeApi.patchMessagePart({
       sessionID: payload.sessionId,
       messageID: part.messageID,
       partID: part.id,
@@ -5617,52 +5241,52 @@ async function handleEditMessage(payload: { sessionId: string; part: MessagePart
 }
 
 async function openFileViewer(path: string) {
-   const key = `file-viewer:${path}`;
-   if (fw.has(key)) {
-     fw.bringToFront(key);
-     return;
-   }
-   const pos = getFileViewerPosition(0.18, 0.14);
-   const lang = guessLanguage(path);
-   fw.open(key, {
-     component: FileViewerContent,
-     props: {
-       path,
-       lang,
-       gutterMode: 'default',
-       theme: shikiTheme.value,
-     },
-     closable: true,
-     resizable: true,
-     scroll: 'manual',
-     title: resolveWorktreeRelativePath(path) || path,
-     x: pos.x,
-     y: pos.y,
-     width: FILE_VIEWER_WINDOW_WIDTH,
-     height: FILE_VIEWER_WINDOW_HEIGHT,
-     expiry: Infinity,
-   });
+  const key = `file-viewer:${path}`;
+  if (fw.has(key)) {
+    fw.bringToFront(key);
+    return;
+  }
+  const pos = getFileViewerPosition(0.18, 0.14);
+  const lang = guessLanguage(path);
+  fw.open(key, {
+    component: FileViewerContent,
+    props: {
+      path,
+      lang,
+      gutterMode: 'default',
+      theme: shikiTheme.value,
+    },
+    closable: true,
+    resizable: true,
+    scroll: 'manual',
+    title: resolveWorktreeRelativePath(path) || path,
+    x: pos.x,
+    y: pos.y,
+    width: FILE_VIEWER_WINDOW_WIDTH,
+    height: FILE_VIEWER_WINDOW_HEIGHT,
+    expiry: Infinity,
+  });
 
-   const directory = activeDirectory.value.trim();
-   if (!directory) {
-     fw.updateOptions(key, {
-       props: {
-         path,
-         rawHtml: 'No active directory selected.',
-         gutterMode: 'none',
-         theme: shikiTheme.value,
-       },
-     });
-     return;
-   }
+  const directory = activeDirectory.value.trim();
+  if (!directory) {
+    fw.updateOptions(key, {
+      props: {
+        path,
+        rawHtml: 'No active directory selected.',
+        gutterMode: 'none',
+        theme: shikiTheme.value,
+      },
+    });
+    return;
+  }
 
-   try {
-      const requestPath = splitFileContentDirectoryAndPath(path, directory);
+  try {
+    const requestPath = splitFileContentDirectoryAndPath(path, directory);
 
-      const data = (await opencodeApi.readFileContent(credentials.baseUrl.value, {
-        directory: requestPath.directory,
-        path: requestPath.path,
-      })) as FileContentResponse;
+    const data = (await opencodeApi.readFileContent({
+      directory: requestPath.directory,
+      path: requestPath.path,
+    })) as FileContentResponse;
     const type = data?.type === 'binary' ? 'binary' : 'text';
     const encoding = typeof data?.encoding === 'string' ? data.encoding : 'utf-8';
     const content = typeof data?.content === 'string' ? data.content : '';
@@ -5777,7 +5401,6 @@ function detectDiffLike(content: string, path?: string) {
     /(^|\n)---\s/m.test(content)
   );
 }
-
 
 function parseMessageTextFromParts(parts: unknown) {
   if (!Array.isArray(parts)) return undefined;
@@ -5937,7 +5560,7 @@ function parseMessage(payload: unknown, eventType: string) {
   if (!payload) return null;
 
   if (typeof payload === 'string') {
-  if (TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) {
+    if (TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) {
       return { id: 'message:default', content: payload };
     }
     return null;
@@ -6167,7 +5790,6 @@ function parseSummaryDiffs(info: Record<string, unknown> | undefined): Array<Mes
   return result;
 }
 
-
 function formatRetryTime(timestamp: number): string {
   const nextDate = new Date(timestamp);
   const now = Date.now();
@@ -6205,34 +5827,19 @@ function applySessionStatusEvent(
   sessionId: string,
   status: { type: 'busy' | 'idle' | 'retry'; message?: string; next?: number; attempt?: number },
 ) {
-  const projectId = resolveProjectIdForSession(sessionId) || selectedProjectId.value;
-  if (!projectId) return;
-
   const isAllowedSession = allowedSessionIds.value.has(sessionId);
   const isSelectedSession = sessionId === selectedSessionId.value;
 
   if (status.type === 'busy' || status.type === 'idle') {
-    const nextStatus: 'busy' | 'idle' = status.type;
-    setSessionStatus(sessionId, nextStatus, projectId);
     if (isAllowedSession) {
       if (isSelectedSession) retryStatus.value = null;
-      updateReasoningExpiry(sessionId, nextStatus);
+      updateReasoningExpiry(sessionId, status.type);
     }
-    if (nextStatus === 'busy') {
-      removePendingNotification(`idle:${sessionId}`);
-    }
-    if (nextStatus === 'idle') {
-      if (!isSelectedSession && sessionGraphStore.value.getSession(sessionId, projectId)) {
-        addPendingNotification(sessionId, `idle:${sessionId}`, 'idle');
-      }
-    }
-    pruneIdleEphemeralSessions();
     return;
   }
 
   if (status.type !== 'retry') return;
 
-  setSessionStatus(sessionId, 'retry', projectId);
   if (!isSelectedSession || !isAllowedSession) return;
 
   updateReasoningExpiry(sessionId, 'busy');
@@ -6363,7 +5970,7 @@ function prunePermissionEntries() {
 async function sendPermissionReply(requestId: string, reply: PermissionReply) {
   if (!ensureConnectionReady('Permission reply')) return;
   const directory = activeDirectory.value.trim();
-  await opencodeApi.replyPermission(credentials.baseUrl.value, requestId, {
+  await opencodeApi.replyPermission(requestId, {
     directory: directory || undefined,
     reply,
   });
@@ -6499,7 +6106,7 @@ function normalizeQuestionAnswers(answers: QuestionAnswer[]) {
 async function sendQuestionReply(requestId: string, answers: QuestionAnswer[]) {
   if (!ensureConnectionReady('Question reply')) return;
   const directory = activeDirectory.value.trim();
-  await opencodeApi.replyQuestion(credentials.baseUrl.value, requestId, {
+  await opencodeApi.replyQuestion(requestId, {
     directory: directory || undefined,
     answers: normalizeQuestionAnswers(answers),
   });
@@ -6508,7 +6115,7 @@ async function sendQuestionReply(requestId: string, answers: QuestionAnswer[]) {
 async function sendQuestionReject(requestId: string) {
   if (!ensureConnectionReady('Question reject')) return;
   const directory = activeDirectory.value.trim();
-  await opencodeApi.rejectQuestion(credentials.baseUrl.value, requestId, directory || undefined);
+  await opencodeApi.rejectQuestion(requestId, directory || undefined);
 }
 
 async function handleQuestionReply(payload: { requestId: string; answers: QuestionAnswer[] }) {
@@ -6552,8 +6159,20 @@ async function reconnectAndReconcile() {
   if (reconnectInFlight) return;
   reconnectInFlight = true;
   try {
-    await ge.connect({ baseUrl: credentials.baseUrl.value, failFast: true, timeoutMs: 5000, authorization: credentials.authHeader.value });
-    await rebuildSessionGraph();
+    await ge.connect({ failFast: true, timeoutMs: 5000 });
+    if (!serverState.bootstrapped.value) {
+      await new Promise<void>((resolve) => {
+        const stop = watch(
+          bootstrapReady,
+          (ready) => {
+            if (!ready) return;
+            stop();
+            resolve();
+          },
+          { immediate: true },
+        );
+      });
+    }
     await fetchProviders(true);
     connectionState.value = 'ready';
     reconnectingMessage.value = '';
@@ -6580,7 +6199,7 @@ async function startInitialization() {
   try {
     connectionState.value = 'connecting';
     initLoadingMessage.value = 'Connecting to SSE stream...';
-    await ge.connect({ baseUrl: credentials.baseUrl.value, failFast: true, timeoutMs: 5000, authorization: credentials.authHeader.value });
+    await ge.connect({ failFast: true, timeoutMs: 5000 });
     connectionState.value = 'bootstrapping';
     initLoadingMessage.value = 'Loading server path...';
     await fetchHomePath();
@@ -6596,7 +6215,6 @@ async function startInitialization() {
       const directory = activeDirectory.value || undefined;
       await fetchPendingPermissions(directory);
       await fetchPendingQuestions(directory);
-      await fetchAllPendingNotifications(directory);
       void loadTreePath('.');
       void refreshSessionDiff();
     }
@@ -6648,6 +6266,7 @@ function handleLogout() {
 }
 
 onMounted(() => {
+  ensureBrowserNotificationPermission();
   window.addEventListener('keydown', handleGlobalKeydown);
   handleWindowResize();
   if (typeof document !== 'undefined' && 'fonts' in document) {
@@ -6656,7 +6275,7 @@ onMounted(() => {
     });
   }
   credentials.load();
-  
+
   if (credentials.isConfigured.value) {
     loginUrl.value = credentials.url.value;
     loginUsername.value = credentials.username.value;
@@ -6678,6 +6297,7 @@ onMounted(() => {
   window.addEventListener('pointerup', handlePointerUp);
   window.addEventListener('resize', handleWindowResize);
   window.addEventListener('storage', handleComposerDraftStorage);
+  document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
   updateFloatingExtentObserver();
   globalEventUnsubscribers.push(
     ge.on('connection.open', () => {
@@ -6687,8 +6307,7 @@ onMounted(() => {
         sendStatus.value = 'Ready';
       }
       if (bootstrapReady.value) {
-        void rebuildSessionGraph();
-        void fetchAllPendingNotifications(activeDirectory.value || undefined);
+        syncActiveSelectionToWorker();
         return;
       }
     }),
@@ -6698,9 +6317,8 @@ onMounted(() => {
       connectionState.value = 'ready';
       reconnectingMessage.value = '';
       sendStatus.value = 'Ready';
-      void rebuildSessionGraph();
+      syncActiveSelectionToWorker();
       void fetchProviders(true);
-      void fetchAllPendingNotifications(activeDirectory.value || undefined);
     }),
   );
   globalEventUnsubscribers.push(
@@ -6733,7 +6351,7 @@ onMounted(() => {
   globalEventUnsubscribers.push(
     ge.on('permission.asked', (packet) => {
       const request = packet as PermissionRequest;
-      addPendingNotification(request.sessionID, request.id, 'permission');
+      upsertPermissionEntry(request);
     }),
   );
   globalEventUnsubscribers.push(
@@ -6743,7 +6361,7 @@ onMounted(() => {
   );
   globalEventUnsubscribers.push(
     ge.on('permission.replied', ({ requestID }) => {
-      removePendingNotification(requestID);
+      removePermissionEntry(requestID);
     }),
   );
   globalEventUnsubscribers.push(
@@ -6755,7 +6373,7 @@ onMounted(() => {
   globalEventUnsubscribers.push(
     ge.on('question.asked', (packet) => {
       const request = packet as QuestionRequest;
-      addPendingNotification(request.sessionID, request.id, 'question');
+      upsertQuestionEntry(request);
     }),
   );
   globalEventUnsubscribers.push(
@@ -6765,7 +6383,7 @@ onMounted(() => {
   );
   globalEventUnsubscribers.push(
     ge.on('question.replied', ({ requestID }) => {
-      removePendingNotification(requestID);
+      removeQuestionEntry(requestID);
     }),
   );
   globalEventUnsubscribers.push(
@@ -6775,65 +6393,21 @@ onMounted(() => {
   );
   globalEventUnsubscribers.push(
     ge.on('question.rejected', ({ requestID }) => {
-      removePendingNotification(requestID);
+      removeQuestionEntry(requestID);
     }),
   );
   globalEventUnsubscribers.push(
-    ge.on('worktree.ready', (packet) => {
-      const directory =
-        typeof (packet as Record<string, unknown>).directory === 'string'
-          ? String((packet as Record<string, unknown>).directory)
-          : activeDirectory.value || projectDirectory.value || '';
-      if (!directory) return;
-      const branch = typeof packet.branch === 'string' ? packet.branch : undefined;
-      void handleWorktreeReady({ directory, branch });
-    }),
-  );
-  globalEventUnsubscribers.push(
-    ge.on('project.updated', (projectUpdated) => {
-      const worktree = typeof projectUpdated.worktree === 'string' ? projectUpdated.worktree : '';
-      const sandboxDirs = Array.isArray(projectUpdated.sandboxes)
-        ? projectUpdated.sandboxes.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-      graphForWrite.syncSandboxes(worktree, sandboxDirs);
-      markSessionGraphChanged();
-    }),
-  );
-  const applySessionInfoUpdate = (sessionInfo: SessionInfo, isDelete: boolean) => {
-    if (sessionInfo.projectID && sessionInfo.directory) {
-      graphForWrite.setSandboxProjectID(sessionInfo.directory, sessionInfo.projectID);
-    }
-    const resolvedProjectId = sessionInfo.projectID || resolveProjectIdForSession(sessionInfo.id);
-    if (isDelete) {
-      graphForWrite.removeSession(sessionInfo.id, resolvedProjectId || undefined);
-      clearNotificationSession(sessionInfo.id);
-      if (selectedSessionId.value === sessionInfo.id) selectedSessionId.value = '';
-    } else {
-      upsertSessionGraph(sessionInfo);
-    }
-    markSessionGraphChanged();
-
-    if (matchesSelectedProject(sessionInfo)) {
-      if (isDelete) {
-        deleteSessionStatus(sessionInfo.id, resolvedProjectId);
-      } else if (sessionInfo.directory) {
-        appendWorktreeDirectory(sessionInfo.directory);
-      }
-    }
-  };
-  globalEventUnsubscribers.push(
-    ge.on('session.created', ({ info }) => {
-      applySessionInfoUpdate(info as SessionInfo, false);
-    }),
-  );
-  globalEventUnsubscribers.push(
-    ge.on('session.updated', ({ info }) => {
-      applySessionInfoUpdate(info as SessionInfo, false);
+    ge.on('worktree.ready', () => {
+      // Worker owns project/worktree graph updates.
     }),
   );
   globalEventUnsubscribers.push(
     ge.on('session.deleted', ({ info }) => {
-      applySessionInfoUpdate(info as SessionInfo, true);
+      const sessionInfo = info as SessionInfo;
+      clearNotificationSession(sessionInfo.id);
+      if (selectedSessionId.value === sessionInfo.id) {
+        selectedKey.value = { projectId: selectedProjectId.value, sessionId: '' };
+      }
     }),
   );
   globalEventUnsubscribers.push(
@@ -6906,6 +6480,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerup', handlePointerUp);
   window.removeEventListener('resize', handleWindowResize);
   window.removeEventListener('storage', handleComposerDraftStorage);
+  document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
   floatingExtentResizeObserver?.disconnect();
   floatingExtentResizeObserver = null;
   floatingExtentObservedEl = null;
@@ -7200,7 +6775,9 @@ onBeforeUnmount(() => {
 
 :deep(.scale-enter-active),
 :deep(.scale-leave-active) {
-  transition: transform 0.15s ease-in, opacity 0.15s ease-in;
+  transition:
+    transform 0.15s ease-in,
+    opacity 0.15s ease-in;
 }
 
 :deep(.scale-enter-from),

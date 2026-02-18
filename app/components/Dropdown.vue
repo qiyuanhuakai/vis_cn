@@ -16,7 +16,7 @@
         @keydown="onKeyDown"
       >
         <slot name="label">
-           <div class="ui-dropdown-label">
+          <div class="ui-dropdown-label">
             <template v-if="props.modelValue != null">
               <slot name="value" :value="props.modelValue">{{ displayLabel }}</slot>
             </template>
@@ -29,7 +29,12 @@
             </div>
           </div>
         </slot>
-        <Icon class="ui-dropdown-icon" :icon="props.menuIcon ?? 'lucide:chevron-down'" :width="12" :height="12" />
+        <Icon
+          class="ui-dropdown-icon"
+          :icon="props.menuIcon ?? 'lucide:chevron-down'"
+          :width="12"
+          :height="12"
+        />
       </button>
     </slot>
     <div
@@ -161,11 +166,14 @@ watch(isActive, (active) => {
   updateCandidateValues();
 });
 
-watch(() => props.open, (value) => {
-  if (value !== undefined && value !== isActive.value) {
-    isActive.value = value;
-  }
-});
+watch(
+  () => props.open,
+  (value) => {
+    if (value !== undefined && value !== isActive.value) {
+      isActive.value = value;
+    }
+  },
+);
 
 function getCandidateItems(): HTMLElement[] {
   if (!menu.value) return [];

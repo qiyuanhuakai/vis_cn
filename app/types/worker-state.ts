@@ -48,6 +48,19 @@ export type ProjectState = {
   id: string;
   name?: string;
   color?: string;
+  icon?: {
+    url?: string;
+    override?: string;
+    color?: string;
+  };
+  commands?: {
+    start?: string;
+  };
+  time?: {
+    created?: number;
+    updated?: number;
+    initialized?: number;
+  };
   worktree: string; // primary worktree directory
   sandboxes: Record<string, SandboxState>; // keyed by directory
 };

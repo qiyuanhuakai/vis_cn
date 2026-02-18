@@ -9,13 +9,16 @@
         @touchmove="$emit('touchmove')"
       >
         <div ref="contentEl" class="output-panel-content">
-          <div v-if="initialRenderTrackingActive" class="absolute w-full h-full m-auto flex justify-center items-center">
+          <div
+            v-if="initialRenderTrackingActive"
+            class="absolute w-full h-full m-auto flex justify-center items-center"
+          >
             <div class="app-loading-spinner" aria-hidden="true"></div>
           </div>
           <template v-for="root in visibleRoots" :key="root.id">
             <div class="thread-block" v-show="!initialRenderTrackingActive">
-                <button
-                  v-if="root.role === 'user' && root.sessionID"
+              <button
+                v-if="root.role === 'user' && root.sessionID"
                 type="button"
                 class="ib-action ib-top-right"
                 @click="confirmFork(root)"
@@ -50,7 +53,11 @@
                 </div>
               </div>
 
-              <div v-if="formatThreadTargetLabel(root)" class="ib-round-target" :style="getRoundTargetStyle(root)">
+              <div
+                v-if="formatThreadTargetLabel(root)"
+                class="ib-round-target"
+                :style="getRoundTargetStyle(root)"
+              >
                 {{ formatThreadTargetLabel(root) }}
               </div>
 
@@ -58,11 +65,12 @@
                 <Transition name="ib-fade" mode="out-in">
                   <div class="ib-msg-block ib-msg-assistant" :key="getDeferredTransitionKey(root)">
                     <div class="ib-msg-body">
-                      <MessageViewer
-                        :html="getAssistantHtml(root)"
-                      />
+                      <MessageViewer :html="getAssistantHtml(root)" />
                     </div>
-                    <div v-if="getMessageAttachments(getFinalAnswer(root)).length > 0" class="output-entry-attachments">
+                    <div
+                      v-if="getMessageAttachments(getFinalAnswer(root)).length > 0"
+                      class="output-entry-attachments"
+                    >
                       <img
                         v-for="item in getMessageAttachments(getFinalAnswer(root))"
                         :key="item.id"
@@ -101,14 +109,30 @@
                     <Icon icon="lucide:timer" :width="10" :height="10" />
                     {{ formatThreadElapsed(root) }}
                   </span>
-                  <span v-if="getThreadContextPercent(root) != null" class="ib-meta-item" :class="contextSeverityClass(getThreadContextPercent(root)!)">
+                  <span
+                    v-if="getThreadContextPercent(root) != null"
+                    class="ib-meta-item"
+                    :class="contextSeverityClass(getThreadContextPercent(root)!)"
+                  >
                     <Icon icon="lucide:gauge" :width="10" :height="10" />
                     {{ getThreadContextPercent(root) }}%
                   </span>
                   <span v-if="getThreadTokens(root)" class="ib-meta-item ib-meta-tokens">
-                    <span class="ib-token-in" title="Input tokens"><Icon icon="lucide:arrow-up" :width="9" :height="9" />{{ formatTokenCount(getThreadTokens(root)!.input) }}</span>
-                    <span class="ib-token-out" title="Output tokens"><Icon icon="lucide:arrow-down" :width="9" :height="9" />{{ formatTokenCount(getThreadTokens(root)!.output) }}</span>
-                    <span class="ib-token-reason" title="Reasoning tokens"><Icon icon="lucide:brain" :width="9" :height="9" />{{ formatTokenCount(getThreadTokens(root)!.reasoning) }}</span>
+                    <span class="ib-token-in" title="Input tokens"
+                      ><Icon icon="lucide:arrow-up" :width="9" :height="9" />{{
+                        formatTokenCount(getThreadTokens(root)!.input)
+                      }}</span
+                    >
+                    <span class="ib-token-out" title="Output tokens"
+                      ><Icon icon="lucide:arrow-down" :width="9" :height="9" />{{
+                        formatTokenCount(getThreadTokens(root)!.output)
+                      }}</span
+                    >
+                    <span class="ib-token-reason" title="Reasoning tokens"
+                      ><Icon icon="lucide:brain" :width="9" :height="9" />{{
+                        formatTokenCount(getThreadTokens(root)!.reasoning)
+                      }}</span
+                    >
                   </span>
                 </span>
                 <span class="ib-footer-actions">
@@ -144,7 +168,6 @@
         </div>
       </div>
 
-
       <div class="statusbar" role="status" aria-live="polite">
         <div class="statusbar-section statusbar-left">
           <span class="statusbar-text">{{ thinkingDisplayText }}</span>
@@ -162,11 +185,27 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
-import { Transition, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue';
+import {
+  Transition,
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+  watchEffect,
+} from 'vue';
 import MessageViewer from './MessageViewer.vue';
 import { renderWorkerHtml } from '../utils/workerRenderer';
 import { useMessages } from '../composables/useMessages';
-import type { MessageAttachment, MessageDiffEntry, MessageStatus, MessageTokens, MessageUsage } from '../types/message';
+import type {
+  MessageAttachment,
+  MessageDiffEntry,
+  MessageStatus,
+  MessageTokens,
+  MessageUsage,
+} from '../types/message';
 import type { MessageInfo, MessagePart, QuestionInfo, ReasoningPart, ToolPart } from '../types/sse';
 
 type DiffEntry = { file: string; diff: string; before?: string; after?: string };
@@ -181,7 +220,14 @@ type HistoryWindowEntry =
   | { key: string; kind: 'message'; content: string; time: number; agent?: string }
   | { key: string; kind: 'tool'; part: ToolPart; time: number }
   | { key: string; kind: 'reasoning'; part: ReasoningPart; time: number }
-  | { key: string; kind: 'question'; questions: QuestionInfo[]; status: 'pending' | 'replied' | 'rejected'; answers?: string[][]; time: number };
+  | {
+      key: string;
+      kind: 'question';
+      questions: QuestionInfo[];
+      status: 'pending' | 'replied' | 'rejected';
+      answers?: string[][];
+      time: number;
+    };
 
 const HISTORY_TOOL_NAMES = new Set(['bash', 'write', 'edit', 'multiedit', 'apply_patch']);
 
@@ -196,7 +242,11 @@ const props = defineProps<{
   busyDescendantCount?: number;
   theme: string;
   resolveAgentColor?: (agent?: string) => string;
-  computeContextPercent?: (tokens: MessageTokens, providerId?: string, modelId?: string) => number | null;
+  computeContextPercent?: (
+    tokens: MessageTokens,
+    providerId?: string,
+    modelId?: string,
+  ) => number | null;
   projectColor?: string;
 }>();
 
@@ -305,7 +355,11 @@ function getAssistantMessages(root: MessageInfo): MessageInfo[] {
 
 function isThreadStreaming(root: MessageInfo): boolean {
   const directChildren = getChildren(root.id);
-  if (directChildren.some((child) => child.role === 'assistant' && getMessageStatus(child) === 'streaming')) {
+  if (
+    directChildren.some(
+      (child) => child.role === 'assistant' && getMessageStatus(child) === 'streaming',
+    )
+  ) {
     return true;
   }
   return getAssistantMessages(root).some((message) => getMessageStatus(message) === 'streaming');
@@ -328,7 +382,11 @@ function extractQuestionInfos(part: ToolPart): QuestionInfo[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter(
     (q): q is QuestionInfo =>
-      q && typeof q === 'object' && typeof q.question === 'string' && typeof q.header === 'string' && Array.isArray(q.options),
+      q &&
+      typeof q === 'object' &&
+      typeof q.question === 'string' &&
+      typeof q.header === 'string' &&
+      Array.isArray(q.options),
   );
 }
 
@@ -393,9 +451,10 @@ function showThreadHistory(root: MessageInfo) {
         kind: 'message',
         content: getMessageContent(entry.message),
         time: entry.time,
-        agent: entry.message.role === 'assistant' && 'agent' in entry.message && entry.message.agent
-          ? entry.message.agent
-          : undefined,
+        agent:
+          entry.message.role === 'assistant' && 'agent' in entry.message && entry.message.agent
+            ? entry.message.agent
+            : undefined,
       } satisfies HistoryWindowEntry;
     }
     if (entry.kind === 'reasoning') {
@@ -490,13 +549,17 @@ function formatThreadTargetLabel(root: MessageInfo): string {
 
 function getRoundTargetStyle(root: MessageInfo) {
   const final = getFinalAnswer(root);
-  const color = props.resolveAgentColor ? props.resolveAgentColor(root.agent ?? final?.agent) : '#4ade80';
+  const color = props.resolveAgentColor
+    ? props.resolveAgentColor(root.agent ?? final?.agent)
+    : '#4ade80';
   return { color };
 }
 
 function getUserBoxStyle(root: MessageInfo) {
   const final = getFinalAnswer(root);
-  const color = props.resolveAgentColor ? props.resolveAgentColor(root.agent ?? final?.agent) : '#334155';
+  const color = props.resolveAgentColor
+    ? props.resolveAgentColor(root.agent ?? final?.agent)
+    : '#334155';
   if (color.startsWith('#') && color.length === 7) {
     return { borderLeftColor: `${color}99` };
   }
@@ -555,7 +618,13 @@ function getThreadTokens(root: MessageInfo): MessageTokens | null {
   }
 
   if (!found) return null;
-  return { input, output, reasoning, total: totalAcc || undefined, cache: { read: cacheRead, write: cacheWrite } };
+  return {
+    input,
+    output,
+    reasoning,
+    total: totalAcc || undefined,
+    cache: { read: cacheRead, write: cacheWrite },
+  };
 }
 
 function getThreadContextPercent(root: MessageInfo): number | null {
@@ -572,7 +641,11 @@ function getThreadContextPercent(root: MessageInfo): number | null {
   }
 
   if (!lastUsage) return null;
-  const value = props.computeContextPercent(lastUsage.tokens, lastUsage.providerId, lastUsage.modelId);
+  const value = props.computeContextPercent(
+    lastUsage.tokens,
+    lastUsage.providerId,
+    lastUsage.modelId,
+  );
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
   return value;
 }
@@ -1041,12 +1114,18 @@ defineExpose({ panelEl });
   gap: 1px;
 }
 
-
-
-.ib-ctx-low { color: rgba(96, 165, 250, 0.7); }
-.ib-ctx-moderate { color: rgba(251, 191, 36, 0.8); }
-.ib-ctx-high { color: rgba(249, 115, 22, 0.85); }
-.ib-ctx-critical { color: rgba(248, 113, 113, 0.9); }
+.ib-ctx-low {
+  color: rgba(96, 165, 250, 0.7);
+}
+.ib-ctx-moderate {
+  color: rgba(251, 191, 36, 0.8);
+}
+.ib-ctx-high {
+  color: rgba(249, 115, 22, 0.85);
+}
+.ib-ctx-critical {
+  color: rgba(248, 113, 113, 0.9);
+}
 
 .ib-top-right {
   float: right;
@@ -1156,7 +1235,6 @@ defineExpose({ panelEl });
   opacity: 0;
 }
 
-
 .app-loading-spinner {
   width: 26px;
   height: 26px;
@@ -1172,5 +1250,4 @@ defineExpose({ panelEl });
     transform: rotate(360deg);
   }
 }
-
 </style>

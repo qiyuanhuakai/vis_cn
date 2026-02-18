@@ -62,11 +62,11 @@ Type in the input bar and press **Ctrl+Enter** to send. You can also:
 
 The toolbar below the input shows dropdowns for agent, model, and thinking mode:
 
-| Control | Shortcut | Description |
-|---------|----------|-------------|
-| Agent | **Tab** / **Shift+Tab** | Cycle through available agents |
-| Model | **Ctrl+M** | Open the model picker |
-| Thinking | **Ctrl+.** / **Ctrl+,** | Cycle thinking-mode variants |
+| Control  | Shortcut                | Description                    |
+| -------- | ----------------------- | ------------------------------ |
+| Agent    | **Tab** / **Shift+Tab** | Cycle through available agents |
+| Model    | **Ctrl+M**              | Open the model picker          |
+| Thinking | **Ctrl+.** / **Ctrl+,** | Cycle thinking-mode variants   |
 
 ### Tool Windows
 
@@ -99,16 +99,16 @@ Shell sessions appear as floating terminal windows powered by xterm.js.
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+Enter** | Send message |
-| **Tab** | Cycle agent forward |
-| **Shift+Tab** | Cycle agent backward |
-| **Ctrl+M** | Open model picker |
-| **Ctrl+.** | Next thinking variant |
-| **Ctrl+,** | Previous thinking variant |
-| **/** (in empty input) | Open command picker |
-| **Esc** | Close project picker dialog |
+| Shortcut               | Action                      |
+| ---------------------- | --------------------------- |
+| **Ctrl+Enter**         | Send message                |
+| **Tab**                | Cycle agent forward         |
+| **Shift+Tab**          | Cycle agent backward        |
+| **Ctrl+M**             | Open model picker           |
+| **Ctrl+.**             | Next thinking variant       |
+| **Ctrl+,**             | Previous thinking variant   |
+| **/** (in empty input) | Open command picker         |
+| **Esc**                | Close project picker dialog |
 
 ## Tech Stack
 

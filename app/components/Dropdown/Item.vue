@@ -40,7 +40,10 @@ const isActive = computed(() =>
 );
 
 onMounted(() => api?.update());
-watch(() => props.value, () => api?.update());
+watch(
+  () => props.value,
+  () => api?.update(),
+);
 
 function onClick() {
   if (props.disabled) return;

@@ -1,5 +1,11 @@
 import { ref, computed } from 'vue';
-import { StorageKeys, storageGet, storageKey, storageRemove, storageSet } from '../utils/storageKeys';
+import {
+  StorageKeys,
+  storageGet,
+  storageKey,
+  storageRemove,
+  storageSet,
+} from '../utils/storageKeys';
 
 type Credentials = {
   url: string;
@@ -34,7 +40,7 @@ export function useCredentials() {
     password.value = newPassword;
 
     if (typeof window === 'undefined') return;
-    
+
     try {
       const data: Credentials = {
         url: newUrl,
@@ -87,7 +93,7 @@ export function useCredentials() {
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (event) => {
       if (event.key !== storageKey(StorageKeys.auth.credentials)) return;
-      
+
       if (!event.newValue) {
         url.value = '';
         username.value = '';

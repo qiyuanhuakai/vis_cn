@@ -283,11 +283,15 @@ onBeforeUnmount(() => {
   cleanupDrag();
 });
 
-watch(() => props.entry, () => {
-  if (dragTarget) {
-    applyTransform(dragX, dragY);
-  }
-}, { deep: true, flush: 'post' });
+watch(
+  () => props.entry,
+  () => {
+    if (dragTarget) {
+      applyTransform(dragX, dragY);
+    }
+  },
+  { deep: true, flush: 'post' },
+);
 
 // Resize handling
 let resizeStartX = 0;
@@ -301,7 +305,7 @@ function onResizeStart(e: PointerEvent) {
   resizeStartY = e.clientY;
   windowStartWidth = props.entry.width || 600;
   windowStartHeight = props.entry.height || 400;
-  
+
   const target = e.target as HTMLElement;
   target.setPointerCapture(e.pointerId);
   target.addEventListener('pointermove', onResizeMove);
@@ -320,7 +324,7 @@ function onResizeEnd(e: PointerEvent) {
   target.removeEventListener('pointermove', onResizeMove);
   target.removeEventListener('pointerup', onResizeEnd);
   target.releasePointerCapture(e.pointerId);
-  
+
   if (props.entry.onResize) {
     props.entry.onResize(props.entry.width || 600, props.entry.height || 400);
   }
@@ -328,50 +332,45 @@ function onResizeEnd(e: PointerEvent) {
 </script>
 
 <template>
-  <div 
+  <div
     ref="windowEl"
-    class="floating-window" 
-    :style="windowStyle" 
+    class="floating-window"
+    :style="windowStyle"
     @pointerdown.capture="onFocus"
     :data-floating-key="entry.key"
   >
     <div class="floating-window-titlebar" @pointerdown="onDragStart">
       <span class="title">{{ entry.title || 'Tool' }}</span>
-      <button 
-        v-if="entry.closable" 
-        class="close-btn"
-        @click.stop="onClose"
-      >×</button>
+      <button v-if="entry.closable" class="close-btn" @click.stop="onClose">×</button>
     </div>
     <div class="floating-window-body-wrapper">
       <div 
         class="floating-window-body" 
-        :class="scrollClass"
+        :class="scrollClass" 
         ref="bodyEl"
         tabindex="-1"
         @click="onBodyClick"
       >
         <template v-if="entry.component">
-          <component 
-            :is="entry.component" 
-            v-bind="entry.props || {}"
-          />
+          <component :is="entry.component" v-bind="entry.props || {}" />
         </template>
-        <CodeContent v-else :html="entry.resolvedHtml || (typeof entry.content === 'string' ? entry.content : '')" :variant="entry.variant" />
+        <CodeContent
+          v-else
+          :html="entry.resolvedHtml || (typeof entry.content === 'string' ? entry.content : '')"
+          :variant="entry.variant"
+        />
       </div>
       <Transition name="fade">
         <button
           v-if="showResumeButton"
           class="follow-resume-btn"
           @click.stop="handleResumeFollowClick"
-        ><Icon icon="lucide:arrow-down" :width="14" :height="14" /></button>
+        >
+          <Icon icon="lucide:arrow-down" :width="14" :height="14" />
+        </button>
       </Transition>
     </div>
-    <div 
-      v-if="entry.resizable" 
-      class="floating-window-resizer" 
-      @pointerdown="onResizeStart"
-    />
+    <div v-if="entry.resizable" class="floating-window-resizer" @pointerdown="onResizeStart" />
   </div>
 </template>
 
@@ -384,7 +383,8 @@ function onResizeEnd(e: PointerEvent) {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translate3d(var(--win-x), var(--win-y), 0) scale(var(--win-scale-x), var(--win-scale-y));
+  transform: translate3d(var(--win-x), var(--win-y), 0)
+    scale(var(--win-scale-x), var(--win-scale-y));
   will-change: transform;
   contain: layout paint;
   display: flex;
@@ -410,7 +410,8 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 12px;
   color: color-mix(in srgb, var(--window-color, #3a4150) 40%, #e2e8f0);
   background: color-mix(in srgb, var(--window-color, #3a4150) 22%, rgba(36, 40, 50, 0.95));
-  border-bottom: 1px solid color-mix(in srgb, var(--window-color, #3a4150) 35%, rgba(90, 100, 120, 0.35));
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--window-color, #3a4150) 35%, rgba(90, 100, 120, 0.35));
   cursor: grab;
   user-select: none;
 }
@@ -473,7 +474,9 @@ function onResizeEnd(e: PointerEvent) {
   align-items: center;
   justify-content: center;
   z-index: 1;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .follow-resume-btn:hover {

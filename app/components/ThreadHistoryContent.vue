@@ -28,22 +28,17 @@
             <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
           </div>
         </div>
-        <div
-          v-else-if="entry.kind === 'question'"
-          class="history-item history-item-question"
-        >
+        <div v-else-if="entry.kind === 'question'" class="history-item history-item-question">
           <div class="history-meta history-meta-question">
             <span class="history-index">❓</span>
             <span class="history-question-badge">QUESTION</span>
-            <span class="history-question-status" :class="`is-${entry.status}`">{{ entry.status }}</span>
+            <span class="history-question-status" :class="`is-${entry.status}`">{{
+              entry.status
+            }}</span>
             <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
           </div>
           <div class="history-question-body">
-            <div
-              v-for="(item, qi) in entry.questions"
-              :key="qi"
-              class="history-question-section"
-            >
+            <div v-for="(item, qi) in entry.questions" :key="qi" class="history-question-section">
               <div class="history-question-header">{{ item.header }}</div>
               <div class="history-question-text">{{ item.question }}</div>
               <div class="history-question-options">
@@ -53,7 +48,9 @@
                   class="history-question-option"
                   :class="{ 'is-selected': isOptionSelected(entry, qi, opt.label) }"
                 >
-                  <span class="option-check">{{ isOptionSelected(entry, qi, opt.label) ? '☑' : '☐' }}</span>
+                  <span class="option-check">{{
+                    isOptionSelected(entry, qi, opt.label) ? '☑' : '☐'
+                  }}</span>
                   <span class="option-label">{{ opt.label }}</span>
                   <span v-if="opt.description" class="option-desc">{{ opt.description }}</span>
                 </div>
@@ -72,8 +69,12 @@
         >
           <div class="history-meta">
             <span class="history-index">🔧</span>
-            <span class="history-tool-badge" :class="`history-tool-${entry.part.tool}`">{{ toolBadgeLabel(entry.part.tool) }}</span>
-            <span class="history-tool-status" :class="`is-${toolStatusLabel(entry.part)}`">{{ toolStatusLabel(entry.part) }}</span>
+            <span class="history-tool-badge" :class="`history-tool-${entry.part.tool}`">{{
+              toolBadgeLabel(entry.part.tool)
+            }}</span>
+            <span class="history-tool-status" :class="`is-${toolStatusLabel(entry.part)}`">{{
+              toolStatusLabel(entry.part)
+            }}</span>
             <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
           </div>
           <div class="history-tool-content">{{ toolSummary(entry.part) }}</div>
@@ -129,7 +130,11 @@ function handleReasoningClick(part: ReasoningPart) {
   props.onReasoningClick?.(part);
 }
 
-function isOptionSelected(entry: QuestionHistoryEntry, questionIndex: number, label: string): boolean {
+function isOptionSelected(
+  entry: QuestionHistoryEntry,
+  questionIndex: number,
+  label: string,
+): boolean {
   if (entry.status !== 'replied' || !entry.answers) return false;
   const answer = entry.answers[questionIndex];
   return Array.isArray(answer) && answer.includes(label);
@@ -147,12 +152,18 @@ function getCustomAnswer(entry: QuestionHistoryEntry, questionIndex: number): st
 
 function toolBadgeLabel(tool: string): string {
   switch (tool) {
-    case 'bash': return 'SHELL';
-    case 'write': return 'WRITE';
-    case 'edit': return 'EDIT';
-    case 'multiedit': return 'EDIT';
-    case 'apply_patch': return 'PATCH';
-    default: return tool.toUpperCase();
+    case 'bash':
+      return 'SHELL';
+    case 'write':
+      return 'WRITE';
+    case 'edit':
+      return 'EDIT';
+    case 'multiedit':
+      return 'EDIT';
+    case 'apply_patch':
+      return 'PATCH';
+    default:
+      return tool.toUpperCase();
   }
 }
 
@@ -177,16 +188,22 @@ function toolSummary(part: ToolPart): string {
     }
     case 'apply_patch': {
       const state = part.state;
-      const metadata = (state.status === 'completed' || state.status === 'error' || state.status === 'running')
-        ? state.metadata : undefined;
+      const metadata =
+        state.status === 'completed' || state.status === 'error' || state.status === 'running'
+          ? state.metadata
+          : undefined;
       const files = Array.isArray(metadata?.files) ? metadata.files : [];
       const paths = files
         .map((f: unknown) => {
           if (!f || typeof f !== 'object') return null;
           const r = f as Record<string, unknown>;
-          return typeof r.relativePath === 'string' ? r.relativePath
-            : typeof r.filePath === 'string' ? r.filePath
-            : typeof r.file === 'string' ? r.file : null;
+          return typeof r.relativePath === 'string'
+            ? r.relativePath
+            : typeof r.filePath === 'string'
+              ? r.filePath
+              : typeof r.file === 'string'
+                ? r.file
+                : null;
         })
         .filter(Boolean) as string[];
       return paths.length > 0 ? paths.join(', ') : 'patch';
@@ -202,10 +219,16 @@ function toolStatusLabel(part: ToolPart): string {
 
 function toolHeaderColor(tool: string): string {
   switch (tool) {
-    case 'bash': return '#a855f7';
-    case 'edit': case 'multiedit': case 'apply_patch': return '#f97316';
-    case 'write': return '#f97316';
-    default: return '#64748b';
+    case 'bash':
+      return '#a855f7';
+    case 'edit':
+    case 'multiedit':
+    case 'apply_patch':
+      return '#f97316';
+    case 'write':
+      return '#f97316';
+    default:
+      return '#64748b';
   }
 }
 
@@ -276,7 +299,9 @@ function formatMessageTime(value?: number) {
 .history-item-reasoning {
   cursor: pointer;
   border-color: color-mix(in srgb, #8b5cf6 40%, #1e293b);
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .history-item-reasoning:hover {
@@ -417,7 +442,9 @@ function formatMessageTime(value?: number) {
 .history-item-tool {
   cursor: pointer;
   border-color: color-mix(in srgb, var(--tool-color, #64748b) 40%, #1e293b);
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .history-item-tool:hover {

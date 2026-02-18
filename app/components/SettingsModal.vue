@@ -17,7 +17,9 @@
         <div class="setting-row">
           <div class="setting-info">
             <div class="setting-label">Enter to send</div>
-            <div class="setting-description">Send messages by pressing Enter. When off, use Ctrl+Enter.</div>
+            <div class="setting-description">
+              Send messages by pressing Enter. When off, use Ctrl+Enter.
+            </div>
           </div>
           <label class="toggle-switch">
             <input v-model="enterToSend" type="checkbox" class="toggle-input" />
@@ -45,15 +47,18 @@ defineEmits<{
 const dialogRef = ref<HTMLDialogElement | null>(null);
 const { enterToSend } = useSettings();
 
-watch(() => props.open, (open) => {
-  const el = dialogRef.value;
-  if (!el) return;
-  if (open) {
-    if (!el.open) el.showModal();
-  } else if (el.open) {
-    el.close();
-  }
-});
+watch(
+  () => props.open,
+  (open) => {
+    const el = dialogRef.value;
+    if (!el) return;
+    if (open) {
+      if (!el.open) el.showModal();
+    } else if (el.open) {
+      el.close();
+    }
+  },
+);
 </script>
 
 <style scoped>
@@ -194,7 +199,9 @@ watch(() => props.open, (open) => {
   height: 16px;
   background: #94a3b8;
   border-radius: 50%;
-  transition: transform 0.2s, background 0.2s;
+  transition:
+    transform 0.2s,
+    background 0.2s;
 }
 
 .toggle-input:checked + .toggle-track {

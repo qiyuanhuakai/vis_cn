@@ -1,5 +1,10 @@
 import { onUnmounted, reactive, type Component, type Ref } from 'vue';
-import type { MessagePart, MessagePartDeltaPacket, MessagePartUpdatedPacket, MessageUpdatedPacket } from '../types/sse';
+import type {
+  MessagePart,
+  MessagePartDeltaPacket,
+  MessagePartUpdatedPacket,
+  MessageUpdatedPacket,
+} from '../types/sse';
 import type { SessionScope } from './useGlobalEvents';
 import type { useFloatingWindows } from './useFloatingWindows';
 import { useDeltaAccumulator } from './useDeltaAccumulator';
@@ -24,7 +29,15 @@ const SUBAGENT_WINDOW_PREFIX = 'subagent:';
 const SUBAGENT_WINDOW_COLOR = '#0ea5e9';
 
 export function useSubagentWindows(options: UseSubagentWindowsOptions) {
-  const { selectedSessionId, fw, subagentComponent, theme, closeDelayMs, resolveModelName, suppressAutoWindows } = options;
+  const {
+    selectedSessionId,
+    fw,
+    subagentComponent,
+    theme,
+    closeDelayMs,
+    resolveModelName,
+    suppressAutoWindows,
+  } = options;
   let boundScope = options.scope;
   const acc = useDeltaAccumulator();
 
