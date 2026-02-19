@@ -10,12 +10,10 @@ import type {
 } from '../types/sse';
 import { createNotificationManager } from '../utils/notificationManager';
 import {
-  getCurrentProject,
   getSessionStatusMap,
   getVcsInfo,
   listProjects,
   listSessions,
-  listWorktrees,
   setAuthorization,
   setBaseUrl,
 } from '../utils/opencode';
@@ -246,7 +244,7 @@ function isProjectInfo(value: unknown): value is ProjectInfo {
     return false;
   }
 
-  if (record.name !== undefined && !asString(record.name)) {
+  if (record.name !== undefined && typeof record.name !== 'string') {
     return false;
   }
 
@@ -264,15 +262,15 @@ function isProjectInfo(value: unknown): value is ProjectInfo {
   if (record.icon !== undefined) {
     const icon = asRecord(record.icon);
     if (!icon) return false;
-    if (icon.url !== undefined && !asString(icon.url)) return false;
-    if (icon.override !== undefined && !asString(icon.override)) return false;
-    if (icon.color !== undefined && !asString(icon.color)) return false;
+    if (icon.url !== undefined && typeof icon.url !== 'string') return false;
+    if (icon.override !== undefined && typeof icon.override !== 'string') return false;
+    if (icon.color !== undefined && typeof icon.color !== 'string') return false;
   }
 
   if (record.commands !== undefined) {
     const commands = asRecord(record.commands);
     if (!commands) return false;
-    if (commands.start !== undefined && !asString(commands.start)) return false;
+    if (commands.start !== undefined && typeof commands.start !== 'string') return false;
   }
 
   return true;
@@ -804,17 +802,7 @@ async function bootstrapState(state: ConnectionState): Promise<void> {
   const builder = createStateBuilder();
   const run = queueOpencodeTask(state, async () => {
     const projects = asObjectArray<Record<string, unknown>>(await listProjects());
-
-    const worktreeSet = new Set<string>();
-    const sandboxSet = new Set<string>();
-    projects.forEach((project) => {
-      const worktree = normalizeDirectory(asString(project.worktree) ?? '');
-      if (worktree) {
-        worktreeSet.add(worktree);
-      }
-    });
-
-    const worktreeToProjectId = new Map<string, string>();
+    const directoriesByProjectId = new Map<string, string>();
 
     const syncDirectoryState = async (directory: string, projectId: string) => {
       const [sessions, statuses] = await Promise.all([
@@ -825,46 +813,30 @@ async function bootstrapState(state: ConnectionState): Promise<void> {
       builder.applyStatuses(asStatusMap(statuses), projectId);
     };
 
-    const fetchCurrentProject = async (directory: string) => {
-      const raw = await getCurrentProject(directory);
-      const project = asRecord(raw);
-      if (!project) return null;
+    projects.forEach((project) => {
       const projectId = asString(project.id)?.trim() ?? '';
       const worktree = normalizeDirectory(asString(project.worktree) ?? '');
-      if (!projectId || !worktree) return null;
-      return {
-        project,
-        projectId,
-        worktree,
-      };
-    };
+      if (!projectId || !worktree) return;
+
+      builder.processProjectUpdated(project as Parameters<typeof builder.processProjectUpdated>[0]);
+      directoriesByProjectId.set(worktree, projectId);
+
+      const sandboxes = asStringArray(project.sandboxes) ?? [];
+      sandboxes.forEach((sandbox) => {
+        const directory = normalizeDirectory(sandbox);
+        if (!directory) return;
+        directoriesByProjectId.set(directory, projectId);
+      });
+    });
 
     await Promise.all(
-      Array.from(worktreeSet).map(async (directory) => {
-        const current = await fetchCurrentProject(directory).catch(() => null);
-        if (!current) return;
-
-        builder.processProjectUpdated({
-          ...current.project,
-          sandboxes: [] as string[],
-        } as Parameters<typeof builder.processProjectUpdated>[0]);
-        worktreeToProjectId.set(current.worktree, current.projectId);
-
-        await syncDirectoryState(directory, current.projectId);
-
-        const sandboxes = asObjectArray<string>(await listWorktrees(directory).catch(() => []));
-
-        sandboxes.forEach((directory) => {
-          builder.registerSandboxDirectory(current.projectId, directory);
-          syncDirectoryState(directory, current.projectId);
-          sandboxSet.add(directory);
-        });
+      Array.from(directoriesByProjectId.entries()).map(async ([directory, projectId]) => {
+        await syncDirectoryState(directory, projectId);
       }),
     );
 
-    const allDirectories = new Set([...worktreeSet, ...sandboxSet]);
     await Promise.all(
-      Array.from(allDirectories).map(async (directory) => {
+      Array.from(directoriesByProjectId.keys()).map(async (directory) => {
         const raw = await getVcsInfo(directory).catch(() => null);
         const vcsInfo = asRecord(raw);
         if (!vcsInfo) return;
