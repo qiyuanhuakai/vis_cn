@@ -150,7 +150,7 @@ function isSessionInfo(value: unknown): value is SessionInfo {
     !asString(record.slug) ||
     !asString(record.projectID) ||
     !asString(record.directory) ||
-    !asString(record.title) ||
+    asString(record.title) === undefined ||
     !asString(record.version)
   ) {
     return false;
@@ -167,7 +167,7 @@ function isSessionInfo(value: unknown): value is SessionInfo {
     return false;
   }
 
-  if (record.parentID !== undefined && !asString(record.parentID)) {
+  if (record.parentID !== undefined && asString(record.parentID) === undefined) {
     return false;
   }
 
