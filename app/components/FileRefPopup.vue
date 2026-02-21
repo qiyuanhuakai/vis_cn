@@ -34,7 +34,7 @@ const filePopup = reactive({
 function resolveFileRef(ref: string): string[] {
   if (!ref) return [];
   if (ref.includes('/')) {
-    return props.files.filter((path) => path === ref);
+    return props.files.filter((path) => path === ref || path.endsWith(`/${ref}`));
   }
   return props.files.filter((path) => path.split('/').at(-1) === ref);
 }

@@ -145,13 +145,14 @@ const revertedPreviewRootId = computed(() => {
 const { files, fileCacheVersion } = useFileTree();
 
 const filesWithBasenames = computed(() => {
-  const merged: string[] = [];
+  const set = new Set<string>();
   for (const path of files.value) {
-    merged.push(path);
-    const basename = path.split('/').at(-1);
-    if (basename && basename !== path) merged.push(basename);
+    const segments = path.split('/');
+    for (let i = 0; i < segments.length; i++) {
+      set.add(segments.slice(i).join('/'));
+    }
   }
-  return merged;
+  return Array.from(set);
 });
 
 function getFinalAnswer(root: MessageInfo): MessageInfo | undefined {
@@ -344,7 +345,13 @@ defineExpose({ panelEl });
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  mask-image: linear-gradient(to bottom, transparent, black 12px, black calc(100% - 12px), transparent);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 12px,
+    black calc(100% - 12px),
+    transparent
+  );
 }
 
 .output-panel-content {
