@@ -1338,10 +1338,11 @@ function toErrorMessage(error: unknown) {
 
 const resolvedTheme = computed(() => resolveTheme(opencodeTheme, 'dark'));
 
+const visibleAgents = computed(() => agents.value.filter((a) => !a.hidden));
+
 function resolveAgentColorForName(agentName?: string) {
-  const name = agentName || 'opencode';
-  const agent = agents.value.find((a) => a.name === name);
-  return resolveAgentColor(name, agent?.color, agents.value, resolvedTheme.value);
+  const agent = agentName ? agents.value.find((a) => a.name === agentName) : undefined;
+  return resolveAgentColor(agentName ?? '', agent?.color, visibleAgents.value, resolvedTheme.value);
 }
 
 function resolveModelMetaForPath(modelPath?: string) {

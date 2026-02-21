@@ -298,10 +298,6 @@ export function resolveAgentColor(
 
   const index = visibleAgents.findIndex((a) => a.name === agentName);
 
-  if (index === -1) {
-    return theme.primary || '#fab283';
-  }
-
-  const colorKey = cycleColors[index % cycleColors.length];
+  const colorKey = cycleColors[(index === -1 ? 0 : index) % cycleColors.length];
   return theme[colorKey] || '#fab283';
 }
