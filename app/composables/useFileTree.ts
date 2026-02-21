@@ -12,6 +12,8 @@ const GIT_STATUS_SCRIPT = [
   'export GIT_CONFIG_NOSYSTEM=1',
   'export TERM=dumb',
   'git -c color.status=false -c color.ui=false --no-pager status --porcelain=v1 -sb 2>/dev/null',
+  'printf "##HEAD\\n"',
+  'git rev-parse --short HEAD 2>/dev/null',
   'printf "##DIFFSTAT\\n"',
   'git diff --shortstat 2>/dev/null',
   'git diff --cached --shortstat 2>/dev/null',
@@ -48,6 +50,7 @@ export type GitBranchInfo = {
   upstream?: string;
   ahead: number;
   behind: number;
+  headShort?: string;
 };
 
 export type GitDiffStats = {
@@ -384,19 +387,31 @@ function parseGitStatusOutput(output: string): GitStatus {
     behind: 0,
   };
   const entries: GitFileStatus[] = [];
-  let inDiffStat = false;
+  let section: 'status' | 'head' | 'diffstat' = 'status';
+  let headShort = '';
   let totalAdditions = 0;
   let totalDeletions = 0;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? '';
 
+    if (line === '##HEAD') {
+      section = 'head';
+      continue;
+    }
     if (line === '##DIFFSTAT') {
-      inDiffStat = true;
+      section = 'diffstat';
       continue;
     }
 
-    if (inDiffStat) {
+    if (section === 'head') {
+      if (!headShort && /^[0-9a-f]+$/i.test(line)) {
+        headShort = line;
+      }
+      continue;
+    }
+
+    if (section === 'diffstat') {
       const stat = parseShortstatLine(line);
       totalAdditions += stat.additions;
       totalDeletions += stat.deletions;
@@ -434,6 +449,10 @@ function parseGitStatusOutput(output: string): GitStatus {
       index: x,
       worktree: y,
     });
+  }
+
+  if (headShort) {
+    branch.headShort = headShort;
   }
 
   return {

@@ -1,21 +1,31 @@
 <template>
   <div class="tree-view">
     <div class="tree-header">
-      <div class="tree-branch" :title="branchTitle">
-        <Icon icon="lucide:git-branch" :width="13" :height="13" class="tree-branch-icon" />
-        <span class="tree-branch-name">{{ branchInfo?.branch ?? 'no git' }}</span>
-        <span v-if="branchInfo && branchInfo.ahead > 0" class="tree-branch-ahead">
-          <Icon icon="lucide:arrow-up" :width="11" :height="11" />{{ branchInfo.ahead }}
+      <div class="tree-branch">
+        <span class="tree-branch-label" :title="branchTitle">
+          <Icon icon="lucide:git-branch" :width="13" :height="13" class="tree-branch-icon" />
+          <span class="tree-branch-name">{{ branchInfo?.branch ?? 'no git' }}</span>
         </span>
-        <span v-if="branchInfo && branchInfo.behind > 0" class="tree-branch-behind">
-          <Icon icon="lucide:arrow-down" :width="11" :height="11" />{{ branchInfo.behind }}
+        <span
+          v-if="branchInfo && branchInfo.ahead > 0"
+          class="tree-branch-ahead"
+          :title="`${branchInfo.ahead} commit(s) ahead of ${branchInfo.upstream ?? 'remote'}`"
+        >
+          <Icon icon="lucide:arrow-up" :width="11" :height="11" title="" />{{ branchInfo.ahead }}
+        </span>
+        <span
+          v-if="branchInfo && branchInfo.behind > 0"
+          class="tree-branch-behind"
+          :title="`${branchInfo.behind} commit(s) behind ${branchInfo.upstream ?? 'remote'}`"
+        >
+          <Icon icon="lucide:arrow-down" :width="11" :height="11" title="" />{{ branchInfo.behind }}
         </span>
         <span
           v-if="diffStats && (diffStats.additions > 0 || diffStats.deletions > 0)"
           class="tree-branch-stats"
           role="button"
           tabindex="0"
-          title="Open combined diff (staged + changes)"
+          :title="diffStatsTitle"
           @click="onDiffStatsClick"
           @keydown.enter.prevent="onDiffStatsClick"
           @keydown.space.prevent="onDiffStatsClick"
@@ -143,6 +153,7 @@ export type GitBranchInfo = {
   upstream?: string;
   ahead: number;
   behind: number;
+  headShort?: string;
 };
 
 export type GitDiffStats = {
@@ -182,8 +193,18 @@ const expanded = computed(() => new Set(props.expandedPaths));
 const branchTitle = computed(() => {
   const info = props.branchInfo;
   if (!info) return 'Git status unavailable';
-  if (!info.upstream) return info.branch;
-  return `${info.branch}...${info.upstream}`;
+  const head = info.headShort ? ` (${info.headShort})` : '';
+  const tracking = info.upstream ? ` tracking ${info.upstream}` : '';
+  return `${info.branch}${head}${tracking}`;
+});
+
+const diffStatsTitle = computed(() => {
+  const stats = props.diffStats;
+  if (!stats) return '';
+  const parts: string[] = [];
+  if (stats.additions > 0) parts.push(`+${stats.additions} insertions`);
+  if (stats.deletions > 0) parts.push(`−${stats.deletions} deletions`);
+  return `${parts.join(', ')} (click to open diff)`;
 });
 
 function setViewMode(mode: TreeViewMode) {
@@ -464,6 +485,14 @@ function onRowDoubleClick(row: { node: TreeNode }) {
   white-space: nowrap;
   overflow: hidden;
   min-height: 20px;
+}
+
+.tree-branch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .tree-branch-icon {
