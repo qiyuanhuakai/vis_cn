@@ -4,56 +4,58 @@
       <div v-if="projectName" class="project-name-bar">
         {{ projectName }}
       </div>
-      <div
-        ref="panelEl"
-        class="output-panel-scroll"
-        @scroll="handleScroll"
-        @wheel="$emit('wheel', $event)"
-        @touchmove="$emit('touchmove')"
-      >
-        <div ref="contentEl" class="output-panel-content" @click="handleContentClick">
-          <div
-            v-if="initialRenderTrackingActive"
-            class="absolute w-full h-full m-auto flex justify-center items-center"
-          >
-            <div class="app-loading-spinner" aria-hidden="true"></div>
+      <div class="output-panel-main">
+        <div
+          ref="panelEl"
+          class="output-panel-scroll"
+          @scroll="handleScroll"
+          @wheel="$emit('wheel', $event)"
+          @touchmove="$emit('touchmove')"
+        >
+          <div ref="contentEl" class="output-panel-content" @click="handleContentClick">
+            <div
+              v-if="initialRenderTrackingActive"
+              class="absolute w-full h-full m-auto flex justify-center items-center"
+            >
+              <div class="app-loading-spinner" aria-hidden="true"></div>
+            </div>
+
+            <template v-for="root in visibleRoots" :key="root.id">
+              <ThreadBlock
+                v-show="!initialRenderTrackingActive && shouldRenderRoot(root)"
+                :root="root"
+                :theme="theme"
+                :files-with-basenames="filesWithBasenames"
+                :is-reverted-preview="isRevertedPreview(root)"
+                :resolve-agent-color="resolveAgentColor"
+                :resolve-model-meta="resolveModelMeta"
+                :compute-context-percent="computeContextPercent"
+                :session-revert="sessionRevert"
+                :assistant-html="getAssistantHtml(root.id)"
+                :deferred-transition-key="getDeferredTransitionKey(root)"
+                @fork-message="emit('fork-message', $event)"
+                @revert-message="emit('revert-message', $event)"
+                @undo-revert="emit('undo-revert')"
+                @show-message-diff="emit('show-message-diff', $event)"
+                @open-image="emit('open-image', $event)"
+                @show-thread-history="emit('show-thread-history', $event)"
+                @message-rendered="handleMessageRendered"
+              />
+            </template>
+
+            <FileRefPopup ref="fileRefPopupRef" :files="files" @open-file="handlePopupOpenFile" />
           </div>
-
-          <template v-for="root in visibleRoots" :key="root.id">
-            <ThreadBlock
-              v-show="!initialRenderTrackingActive && shouldRenderRoot(root)"
-              :root="root"
-              :theme="theme"
-              :files-with-basenames="filesWithBasenames"
-              :is-reverted-preview="isRevertedPreview(root)"
-              :resolve-agent-color="resolveAgentColor"
-              :resolve-model-meta="resolveModelMeta"
-              :compute-context-percent="computeContextPercent"
-              :session-revert="sessionRevert"
-              :assistant-html="getAssistantHtml(root.id)"
-              :deferred-transition-key="getDeferredTransitionKey(root)"
-              @fork-message="emit('fork-message', $event)"
-              @revert-message="emit('revert-message', $event)"
-              @undo-revert="emit('undo-revert')"
-              @show-message-diff="emit('show-message-diff', $event)"
-              @open-image="emit('open-image', $event)"
-              @show-thread-history="emit('show-thread-history', $event)"
-              @message-rendered="handleMessageRendered"
-            />
-          </template>
-
-          <button
-            v-show="!isFollowing"
-            type="button"
-            class="follow-button"
-            aria-label="Scroll to latest"
-            @click="$emit('resume-follow')"
-          >
-            <Icon icon="lucide:arrow-down" :width="14" :height="14" />
-          </button>
-
-          <FileRefPopup ref="fileRefPopupRef" :files="files" @open-file="handlePopupOpenFile" />
         </div>
+
+        <button
+          v-show="!isFollowing"
+          type="button"
+          class="follow-button"
+          aria-label="Scroll to latest"
+          @click="$emit('resume-follow')"
+        >
+          <Icon icon="lucide:arrow-down" :width="14" :height="14" />
+        </button>
       </div>
 
       <StatusBar
@@ -354,6 +356,14 @@ defineExpose({ panelEl });
   );
 }
 
+.output-panel-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .output-panel-content {
   display: flex;
   flex-direction: column;
@@ -411,7 +421,7 @@ defineExpose({ panelEl });
 }
 
 .follow-button {
-  position: sticky;
+  position: absolute;
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
@@ -429,9 +439,7 @@ defineExpose({ panelEl });
   place-items: center;
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.45);
   cursor: pointer;
-  align-self: center;
-  margin-top: 4px;
-  z-index: 2;
+  z-index: 3;
 }
 
 .follow-button:hover {
