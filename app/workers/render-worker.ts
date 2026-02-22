@@ -46,7 +46,6 @@ function isInlineColorRef(value: string) {
   return HEX_COLOR_REF_RE.test(value) || FUNC_COLOR_REF_RE.test(value);
 }
 
-
 function parseInlineFileRef(rawRef: string, fileSet: Set<string>): ParsedInlineFileRef | null {
   const ref = rawRef.trim();
   if (!ref) return null;

@@ -1,5 +1,9 @@
 <template>
-  <div v-if="state.html" class="message-viewer min-h-[1.2em] leading-[inherit] text-[inherit]" :class="{ 'no-copy': !copyButton }">
+  <div
+    v-if="state.html"
+    class="message-viewer min-h-[1.2em] leading-[inherit] text-[inherit]"
+    :class="{ 'no-copy': !copyButton }"
+  >
     <div
       class="message-content leading-[inherit] text-[inherit]"
       v-html="state.html"

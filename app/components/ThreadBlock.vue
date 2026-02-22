@@ -59,7 +59,11 @@
       <Transition name="ib-fade" mode="out-in">
         <div class="ib-msg-block ib-msg-assistant" :key="deferredTransitionKey">
           <div class="ib-msg-body">
-            <MessageViewer class="message-viewer-context-assistant" :html="assistantHtml" copy-button />
+            <MessageViewer
+              class="message-viewer-context-assistant"
+              :html="assistantHtml"
+              copy-button
+            />
           </div>
           <div
             v-if="getMessageAttachments(getFinalAnswer(root)).length > 0"

@@ -170,12 +170,7 @@ function applyLineSelection() {
 }
 
 watch(
-  [
-    () => renderedHtml.value,
-    () => props.rawHtml,
-    () => props.lines,
-    () => activeTabIndex.value,
-  ],
+  [() => renderedHtml.value, () => props.rawHtml, () => props.lines, () => activeTabIndex.value],
   () => {
     nextTick(() => {
       applyLineSelection();

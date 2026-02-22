@@ -155,8 +155,10 @@
                 :value="command.name"
               >
                 <div>
-                <div class="command-name">/{{ command.name }}</div>
-                <div v-if="command.description" class="command-desc">{{ command.description }}</div>
+                  <div class="command-name">/{{ command.name }}</div>
+                  <div v-if="command.description" class="command-desc">
+                    {{ command.description }}
+                  </div>
                 </div>
               </DropdownItem>
             </div>
@@ -578,7 +580,9 @@ const commandMatches = computed(() => {
 
 const commandPopupDismissed = ref(false);
 
-const commandPopupOpen = computed(() => !commandPopupDismissed.value && commandMatches.value.length > 0);
+const commandPopupOpen = computed(
+  () => !commandPopupDismissed.value && commandMatches.value.length > 0,
+);
 watch(slashQuery, () => {
   commandPopupDismissed.value = false;
 });

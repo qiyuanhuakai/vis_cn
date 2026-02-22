@@ -564,13 +564,6 @@ type Attachment = {
   dataUrl: string;
 };
 
-type MessageAttachment = {
-  id: string;
-  url: string;
-  mime: string;
-  filename: string;
-};
-
 type ComposerDraft = {
   messageInput: string;
   attachments: Attachment[];
@@ -651,7 +644,6 @@ function handleOutputPanelContentResized() {
 const runningToolIds = reactive(new Set<string>());
 
 type MessageDiffEntry = { file: string; diff: string; before?: string; after?: string };
-type SessionStatusType = 'busy' | 'idle' | 'retry';
 
 const userMessageMetaById = ref<Record<string, UserMessageMeta>>({});
 const userMessageTimeById = ref<Record<string, number>>({});
@@ -682,15 +674,6 @@ const notificationPermissionRequested = ref(false);
 const sidePanelCollapsed = ref(readSidePanelCollapsed());
 const sidePanelActiveTab = ref(readSidePanelTab());
 
-type ProjectInfo = {
-  id: string;
-  worktree?: string;
-  sandboxes?: string[];
-  name?: string;
-  icon?: { url?: string; override?: string; color?: string };
-  commands?: { start?: string };
-};
-
 type SessionInfo = {
   id: string;
   projectID?: string;
@@ -711,20 +694,6 @@ type SessionInfo = {
     snapshot?: string;
     diff?: string;
   };
-};
-
-type TopPanelTreeSession = {
-  id: string;
-  title?: string;
-  slug?: string;
-  status: 'busy' | 'idle' | 'retry' | 'unknown';
-  timeUpdated?: number;
-};
-
-type TopPanelTreeSandbox = {
-  directory: string;
-  branch?: string;
-  sessions: TopPanelTreeSession[];
 };
 
 type WorktreeInfo = {
@@ -878,16 +847,6 @@ function collectAllSessionsByProject() {
 
 const sessionsByProject = computed(() => collectAllSessionsByProject());
 
-const worktrees = computed<string[]>(() => {
-  const project = serverState.projects[selectedProjectId.value];
-  if (!project) return [];
-  const unique = new Set<string>([project.worktree]);
-  Object.keys(project.sandboxes).forEach((directory) => {
-    unique.add(directory);
-  });
-  return Array.from(unique);
-});
-
 const sessions = computed<SessionInfo[]>(() => {
   const projectId = selectedProjectId.value.trim();
   if (!projectId) return [];
@@ -982,7 +941,6 @@ const connectionState = ref<'connecting' | 'bootstrapping' | 'ready' | 'reconnec
 );
 const reconnectingMessage = ref('');
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectInFlight = false;
 let initializationInFlight = false;
 const loginUrl = ref('http://localhost:4096');
 const loginUsername = ref('');
@@ -1887,33 +1845,6 @@ function getSessionStatus(sessionId: string, projectId?: string) {
   return status === 'busy' || status === 'idle' || status === 'retry' ? status : undefined;
 }
 
-function getDescendantSessionIds(rootId: string): string[] {
-  const childrenByParent = new Map<string, string[]>();
-  sessionParentById.value.forEach((parentId, sessionId) => {
-    if (!parentId) return;
-    const bucket = childrenByParent.get(parentId) ?? [];
-    bucket.push(sessionId);
-    childrenByParent.set(parentId, bucket);
-  });
-  const result: string[] = [];
-  const stack = childrenByParent.get(rootId) ?? [];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    result.push(current);
-    const children = childrenByParent.get(current);
-    if (children) stack.push(...children);
-  }
-  return result;
-}
-
-function hasAnyBusyDescendant(rootId: string, projectId?: string): boolean {
-  const descendants = getDescendantSessionIds(rootId);
-  return descendants.some((sid) => {
-    const status = getSessionStatus(sid, projectId);
-    return status === 'busy' || status === 'retry';
-  });
-}
-
 function measureTerminalCellWidth(fontFamily: string, fontSizePx: number) {
   if (typeof document === 'undefined') return fontSizePx * 0.62;
   const probe = document.createElement('span');
@@ -2029,49 +1960,6 @@ function parseShellArgs(input: string) {
   if (!trimmed) return { command: undefined, args: [] as string[] };
   const parts = trimmed.split(/\s+/g).filter(Boolean);
   return { command: parts[0], args: parts.slice(1) };
-}
-
-function isRenderableImageUrl(url: string) {
-  return (
-    url.startsWith('data:') ||
-    url.startsWith('http://') ||
-    url.startsWith('https://') ||
-    url.startsWith('blob:')
-  );
-}
-
-function normalizeAttachments(list: MessageAttachment[]) {
-  const seen = new Set<string>();
-  const result: MessageAttachment[] = [];
-  list.forEach((item) => {
-    const key = `${item.url}|${item.mime}|${item.filename}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    result.push(item);
-  });
-  return result;
-}
-
-function parseImageAttachmentsFromParts(parts: unknown) {
-  if (!Array.isArray(parts)) return [] as MessageAttachment[];
-  const attachments: MessageAttachment[] = [];
-  parts.forEach((part, index) => {
-    if (!part || typeof part !== 'object') return;
-    const record = part as Record<string, unknown>;
-    const type = typeof record.type === 'string' ? record.type : '';
-    if (type !== 'file' && type !== 'image') return;
-    const mime = typeof record.mime === 'string' ? record.mime : '';
-    if (!mime.startsWith('image/')) return;
-    const url =
-      (typeof record.url === 'string' ? record.url : undefined) ??
-      (typeof record.dataUrl === 'string' ? record.dataUrl : undefined) ??
-      '';
-    if (!url || !isRenderableImageUrl(url)) return;
-    const filename = typeof record.filename === 'string' ? record.filename : 'image';
-    const id = typeof record.id === 'string' ? record.id : `img-${index}-${url.slice(0, 16)}`;
-    attachments.push({ id, url, mime, filename });
-  });
-  return normalizeAttachments(attachments);
 }
 
 function generateAttachmentId() {
@@ -2737,14 +2625,6 @@ type MessageTokens = {
   };
 };
 
-type MessageUsage = {
-  tokens: MessageTokens;
-  cost?: number;
-  providerId?: string;
-  modelId?: string;
-  contextPercent?: number | null;
-};
-
 function parseMessageTime(info?: Record<string, unknown>): number | undefined {
   if (!info) return undefined;
   const time = info.time as Record<string, unknown> | undefined;
@@ -2800,161 +2680,6 @@ function computeContextPercent(tokens: MessageTokens, providerId?: string, model
   return Math.round((total / contextLimit) * 100);
 }
 
-function parseMessageTokens(value: unknown): MessageTokens | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const input = typeof record.input === 'number' ? record.input : 0;
-  const output = typeof record.output === 'number' ? record.output : 0;
-  const reasoning = typeof record.reasoning === 'number' ? record.reasoning : 0;
-  const cache =
-    record.cache && typeof record.cache === 'object'
-      ? (record.cache as Record<string, unknown>)
-      : null;
-  const cacheRead = cache && typeof cache.read === 'number' ? cache.read : 0;
-  const cacheWrite = cache && typeof cache.write === 'number' ? cache.write : 0;
-  if (!Number.isFinite(input) && !Number.isFinite(output) && !Number.isFinite(reasoning))
-    return null;
-  return {
-    input: Number.isFinite(input) ? input : 0,
-    output: Number.isFinite(output) ? output : 0,
-    reasoning: Number.isFinite(reasoning) ? reasoning : 0,
-    cache: {
-      read: Number.isFinite(cacheRead) ? cacheRead : 0,
-      write: Number.isFinite(cacheWrite) ? cacheWrite : 0,
-    },
-  };
-}
-
-function resolveMessageUsage(payload: unknown, eventType: string): MessageUsage | null {
-  if (!payload || typeof payload !== 'object') return null;
-  if (!TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) return null;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const info =
-    properties?.info && typeof properties.info === 'object'
-      ? (properties.info as Record<string, unknown>)
-      : undefined;
-  const part =
-    properties?.part && typeof properties.part === 'object'
-      ? (properties.part as Record<string, unknown>)
-      : undefined;
-  const partType = typeof part?.type === 'string' ? part.type : undefined;
-  const isStepFinish = partType === 'step-finish';
-  const tokensSource = isStepFinish ? part?.tokens : info?.tokens;
-  const tokens = parseMessageTokens(tokensSource);
-  if (!tokens) return null;
-  const modelInfo =
-    info?.model && typeof info.model === 'object'
-      ? (info.model as Record<string, unknown>)
-      : undefined;
-  const providerId =
-    typeof info?.providerID === 'string'
-      ? info.providerID
-      : typeof modelInfo?.providerID === 'string'
-        ? (modelInfo.providerID as string)
-        : undefined;
-  const modelId =
-    typeof info?.modelID === 'string'
-      ? info.modelID
-      : typeof modelInfo?.modelID === 'string'
-        ? (modelInfo.modelID as string)
-        : undefined;
-  const costSource = isStepFinish ? part?.cost : info?.cost;
-  const cost = typeof costSource === 'number' ? costSource : undefined;
-  const contextPercent = computeContextPercent(tokens, providerId, modelId);
-  return {
-    tokens,
-    cost,
-    providerId: providerId?.trim() || undefined,
-    modelId: modelId?.trim() || undefined,
-    contextPercent,
-  };
-}
-
-function resolveMessageUsageFromInfo(info?: Record<string, unknown>): MessageUsage | null {
-  if (!info) return null;
-  const tokens = parseMessageTokens(info.tokens);
-  if (!tokens) return null;
-  const modelInfo =
-    info.model && typeof info.model === 'object'
-      ? (info.model as Record<string, unknown>)
-      : undefined;
-  const providerId =
-    typeof info.providerID === 'string'
-      ? info.providerID
-      : typeof modelInfo?.providerID === 'string'
-        ? (modelInfo.providerID as string)
-        : undefined;
-  const modelId =
-    typeof info.modelID === 'string'
-      ? info.modelID
-      : typeof modelInfo?.modelID === 'string'
-        ? (modelInfo.modelID as string)
-        : undefined;
-  const cost = typeof info.cost === 'number' ? info.cost : undefined;
-  return {
-    tokens,
-    cost,
-    providerId: providerId?.trim() || undefined,
-    modelId: modelId?.trim() || undefined,
-    contextPercent: computeContextPercent(tokens, providerId, modelId),
-  };
-}
-
-function parseUsageUpdate(payload: unknown, eventType: string) {
-  if (!payload || typeof payload !== 'object') return null;
-  if (!TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) return null;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const info =
-    properties?.info && typeof properties.info === 'object'
-      ? (properties.info as Record<string, unknown>)
-      : undefined;
-  const part =
-    properties?.part && typeof properties.part === 'object'
-      ? (properties.part as Record<string, unknown>)
-      : undefined;
-  const partType = typeof part?.type === 'string' ? part.type : undefined;
-  const isMessageUpdated = String(eventType).toLowerCase().includes('message.updated');
-  if (partType && partType !== 'step-finish' && !isMessageUpdated) return null;
-  const usage = resolveMessageUsage(payload, eventType);
-  if (!usage) return null;
-  const messageId =
-    (part?.messageID as string | undefined) ??
-    (info?.id as string | undefined) ??
-    (info?.messageId as string | undefined) ??
-    (properties?.messageId as string | undefined) ??
-    (properties?.id as string | undefined) ??
-    (record.messageId as string | undefined) ??
-    (record.id as string | undefined);
-  const sessionId =
-    (typeof part?.sessionID === 'string' ? (part.sessionID as string) : undefined) ??
-    (typeof info?.sessionID === 'string' ? (info.sessionID as string) : undefined) ??
-    parseSessionId(payload);
-  if (!messageId) return null;
-  return { messageId, sessionId, usage };
-}
-
 function storeUserMessageMeta(messageId: string | undefined, meta: UserMessageMeta | null) {
   if (!messageId || !meta) return;
   userMessageMetaById.value = { ...userMessageMetaById.value, [messageId]: meta };
@@ -2963,32 +2688,6 @@ function storeUserMessageMeta(messageId: string | undefined, meta: UserMessageMe
 function storeUserMessageTime(messageId: string | undefined, messageTime?: number) {
   if (!messageId || typeof messageTime !== 'number') return;
   userMessageTimeById.value = { ...userMessageTimeById.value, [messageId]: messageTime };
-}
-
-function resolveUserMessageMetaForMessage(
-  messageId?: string,
-  fallbackId?: string,
-  meta?: UserMessageMeta | null,
-): UserMessageMeta | null {
-  if (meta) return meta;
-  if (messageId && userMessageMetaById.value[messageId])
-    return userMessageMetaById.value[messageId];
-  if (fallbackId && userMessageMetaById.value[fallbackId])
-    return userMessageMetaById.value[fallbackId];
-  return null;
-}
-
-function resolveUserMessageTimeForMessage(
-  messageId?: string,
-  fallbackId?: string,
-  messageTime?: number,
-): number | undefined {
-  if (typeof messageTime === 'number') return messageTime;
-  if (messageId && userMessageTimeById.value[messageId] !== undefined)
-    return userMessageTimeById.value[messageId];
-  if (fallbackId && userMessageTimeById.value[fallbackId] !== undefined)
-    return userMessageTimeById.value[fallbackId];
-  return undefined;
 }
 
 async function fetchHistory(sessionId: string, isSubagentMessage = false) {
@@ -4323,35 +4022,6 @@ watchEffect(() => {
   opencodeApi.setAuthorization(credentials.authHeader.value);
 });
 
-function matchesSelectedWorktree(sessionInfo: SessionInfo) {
-  const directory = activeDirectory.value.trim();
-  if (!directory) return true;
-  if (sessionInfo.directory && sessionInfo.directory !== directory) return false;
-  return true;
-}
-
-const SESSION_ID_KEYS = new Set(['sessionID', 'sessionId', 'session_id']);
-
-function parseSessionId(payload: unknown) {
-  if (!payload || typeof payload !== 'object') return undefined;
-  const queue: Record<string, unknown>[] = [payload as Record<string, unknown>];
-  const visited = new Set<unknown>();
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || visited.has(current)) continue;
-    visited.add(current);
-    for (const [key, value] of Object.entries(current)) {
-      if (SESSION_ID_KEYS.has(key) && typeof value === 'string' && value.startsWith('ses_')) {
-        return value;
-      }
-      if (value && typeof value === 'object') {
-        queue.push(value as Record<string, unknown>);
-      }
-    }
-  }
-  return undefined;
-}
-
 function formatToolValue(value: unknown) {
   if (typeof value === 'string') return value;
   try {
@@ -5319,404 +4989,6 @@ function guessLanguage(path?: string, eventType?: string) {
   }
 }
 
-function detectDiffLike(content: string, path?: string) {
-  if (path && path.includes('diff')) return true;
-  return (
-    /(^|\n)diff --git\s/m.test(content) ||
-    /(^|\n)@@\s/m.test(content) ||
-    /(^|\n)\+\+\+\s/m.test(content) ||
-    /(^|\n)---\s/m.test(content)
-  );
-}
-
-function parseMessageTextFromParts(parts: unknown) {
-  if (!Array.isArray(parts)) return undefined;
-  const texts: string[] = [];
-  for (const part of parts) {
-    if (!part || typeof part !== 'object') continue;
-    const record = part as Record<string, unknown>;
-    const type = typeof record.type === 'string' ? record.type : undefined;
-    const text = typeof record.text === 'string' ? record.text : undefined;
-    if (!text) continue;
-    if (!type || type.includes('text')) texts.push(text);
-  }
-  if (texts.length === 0) return undefined;
-  return texts.join('');
-}
-
-function parseMessageAttachments(payload: unknown) {
-  if (!payload || typeof payload !== 'object') return null;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const info =
-    properties?.info && typeof properties.info === 'object'
-      ? (properties.info as Record<string, unknown>)
-      : undefined;
-  const data =
-    (record.data as Record<string, unknown> | undefined) ??
-    nestedPayload ??
-    (record.result as Record<string, unknown> | undefined);
-  const messageObject =
-    (properties?.message as Record<string, unknown> | undefined) ??
-    (data?.message as Record<string, unknown> | undefined) ??
-    (record.message as Record<string, unknown> | undefined);
-  const part =
-    (properties?.part && typeof properties.part === 'object'
-      ? (properties.part as Record<string, unknown>)
-      : undefined) ??
-    (data?.part && typeof data.part === 'object'
-      ? (data.part as Record<string, unknown>)
-      : undefined) ??
-    (record.part && typeof record.part === 'object'
-      ? (record.part as Record<string, unknown>)
-      : undefined) ??
-    (messageObject?.part && typeof messageObject.part === 'object'
-      ? (messageObject.part as Record<string, unknown>)
-      : undefined);
-  const parts =
-    (messageObject?.parts as unknown) ?? (data?.parts as unknown) ?? (record.parts as unknown);
-
-  const attachments = normalizeAttachments([
-    ...parseImageAttachmentsFromParts(parts),
-    ...parseImageAttachmentsFromParts(part ? [part] : []),
-  ]);
-
-  if (attachments.length === 0) return null;
-
-  const messageId =
-    (part?.messageID as string | undefined) ??
-    (messageObject?.id as string | undefined) ??
-    (messageObject?.messageId as string | undefined) ??
-    (info?.id as string | undefined) ??
-    (properties?.messageId as string | undefined) ??
-    (properties?.id as string | undefined) ??
-    (data?.messageId as string | undefined) ??
-    (data?.id as string | undefined) ??
-    (record.messageId as string | undefined) ??
-    (record.id as string | undefined);
-
-  return { messageId, attachments };
-}
-
-function hasToolParts(
-  parts?: Map<string, string>,
-  partOrder?: string[],
-  messageId?: string,
-  sessionId?: string,
-): boolean {
-  if (!parts || !partOrder || parts.size === 0) return false;
-  return false;
-}
-
-const messagePartTypesById = new Map<string, Set<string>>();
-
-function registerPartType(messageKey: string, partType?: string) {
-  if (!partType || !messageKey) return;
-  const set = messagePartTypesById.get(messageKey) ?? new Set();
-  set.add(partType);
-  messagePartTypesById.set(messageKey, set);
-}
-
-function classifyUserMessage(
-  role: string | undefined,
-  content: string,
-  userMeta: UserMessageMeta | null,
-): 'real_user' | 'system_injection' | 'unknown' {
-  if (role !== 'user') return 'unknown';
-
-  // 1. If we have explicit user metadata (agent/model config), it's likely a real user request
-  // (or a very sophisticated injection simulating a user config, but we treat that as user-initiated).
-  if (userMeta) return 'real_user';
-
-  // 2. If the content matches something recently typed by the user in this session.
-  const normalized = content.trim();
-  const recentMatch = recentUserInputs.find((entry) => entry.text === normalized);
-  if (recentMatch) return 'real_user';
-
-  // 3. Fallback: If we can't confirm it's a real user, and it has no meta,
-  // we classify as unknown (or system_injection if we had a negative signal).
-  // The prompt says "If real-user vs injected cannot be determined, classify as unknown".
-  return 'unknown';
-}
-
-function parsePartType(payload: unknown, eventType: string) {
-  if (!payload || typeof payload !== 'object') return null;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const part =
-    properties?.part && typeof properties.part === 'object'
-      ? (properties.part as Record<string, unknown>)
-      : undefined;
-  const partType = typeof part?.type === 'string' ? part.type : undefined;
-
-  if (!partType) return null;
-
-  const messageId =
-    (part?.messageID as string | undefined) ?? (properties?.messageId as string | undefined);
-
-  const sessionId =
-    (typeof part?.sessionID === 'string' ? (part.sessionID as string) : undefined) ??
-    parseSessionId(payload);
-
-  if (!messageId) return null;
-
-  return { partType, messageId, sessionId };
-}
-
-function parseMessage(payload: unknown, eventType: string) {
-  if (!payload) return null;
-
-  if (typeof payload === 'string') {
-    if (TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) {
-      return { id: 'message:default', content: payload };
-    }
-    return null;
-  }
-
-  if (typeof payload !== 'object') return null;
-
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const info =
-    properties?.info && typeof properties.info === 'object'
-      ? (properties.info as Record<string, unknown>)
-      : undefined;
-  const part =
-    properties?.part && typeof properties.part === 'object'
-      ? (properties.part as Record<string, unknown>)
-      : undefined;
-  const data =
-    (record.data as Record<string, unknown> | undefined) ??
-    nestedPayload ??
-    (record.result as Record<string, unknown> | undefined);
-
-  const messageObject =
-    (properties?.message as Record<string, unknown> | undefined) ??
-    (data?.message as Record<string, unknown> | undefined) ??
-    (record.message as Record<string, unknown> | undefined);
-  const partType =
-    (part?.type as string | undefined) ??
-    (properties?.type as string | undefined) ??
-    (data?.type as string | undefined) ??
-    (messageObject?.type as string | undefined);
-  const partText = typeof part?.text === 'string' ? (part.text as string) : undefined;
-  const messageFromPart =
-    partText && (!partType || partType.includes('text') || partType === 'reasoning')
-      ? partText
-      : undefined;
-  const partId = typeof part?.id === 'string' ? (part.id as string) : undefined;
-  const messageFromObject =
-    (messageObject &&
-      (typeof messageObject.content === 'string'
-        ? messageObject.content
-        : typeof messageObject.text === 'string'
-          ? messageObject.text
-          : undefined)) ??
-    (messageObject && parseMessageTextFromParts(messageObject.parts));
-
-  const message = messageFromPart ?? messageFromObject;
-
-  if (typeof message !== 'string') return null;
-
-  if (partType && (partType.startsWith('input') || partType.startsWith('step-'))) return null;
-
-  const role =
-    (part?.role as string | undefined) ??
-    (messageObject?.role as string | undefined) ??
-    (info?.role as string | undefined) ??
-    (properties?.role as string | undefined) ??
-    (data?.role as string | undefined) ??
-    (record.role as string | undefined);
-  let resolvedRole = role as 'user' | 'assistant' | undefined;
-  if (!resolvedRole) {
-    const normalized = message.trim();
-    const recentMatch = recentUserInputs.find((entry) => entry.text === normalized);
-    if (recentMatch) resolvedRole = 'user';
-  }
-
-  const userMeta =
-    parseUserMessageMeta(info) ??
-    parseUserMessageMeta(messageObject as Record<string, unknown> | undefined);
-  const messageTime =
-    parseMessageTime(info) ??
-    parseMessageTime(messageObject as Record<string, unknown> | undefined);
-
-  const messageId =
-    (part?.messageID as string | undefined) ??
-    (messageObject?.id as string | undefined) ??
-    (messageObject?.messageId as string | undefined) ??
-    (info?.id as string | undefined) ??
-    (properties?.messageId as string | undefined) ??
-    (properties?.id as string | undefined) ??
-    (data?.messageId as string | undefined) ??
-    (data?.id as string | undefined) ??
-    (record.messageId as string | undefined) ??
-    (record.id as string | undefined) ??
-    (properties?.sessionID as string | undefined);
-  const id = (part?.id as string | undefined) ?? messageId ?? 'message:default';
-
-  if (userMeta) {
-    storeUserMessageMeta(messageId ?? id, userMeta);
-  }
-  if (typeof messageTime === 'number') {
-    storeUserMessageTime(messageId ?? id, messageTime);
-  }
-
-  return {
-    id,
-    messageId,
-    content: message,
-    bodyContent: messageFromObject,
-    role: resolvedRole,
-    partId,
-    partType,
-    isPartUpdatedEvent: eventType === 'message.part.updated',
-    userMeta,
-    messageTime,
-  };
-}
-
-function parseStepFinish(payload: unknown, eventType: string) {
-  if (!payload || typeof payload !== 'object') return null;
-  if (!TOOL_RENDERER_MESSAGE_EVENTS.has(eventType)) return null;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const part =
-    properties?.part && typeof properties.part === 'object'
-      ? (properties.part as Record<string, unknown>)
-      : undefined;
-  const partType = typeof part?.type === 'string' ? part.type : undefined;
-  if (partType !== 'step-finish') return null;
-  const reason = typeof part?.reason === 'string' ? (part.reason as string) : undefined;
-  const sessionId = typeof part?.sessionID === 'string' ? (part.sessionID as string) : undefined;
-  const messageId = typeof part?.messageID === 'string' ? (part.messageID as string) : undefined;
-  return { reason, sessionId, messageId };
-}
-
-function parseMessageFinish(payload: unknown, eventType: string) {
-  if (!payload || typeof payload !== 'object') return null;
-  const record = payload as Record<string, unknown>;
-  const nestedPayload =
-    record.payload && typeof record.payload === 'object'
-      ? (record.payload as Record<string, unknown>)
-      : undefined;
-  const properties =
-    (nestedPayload?.properties && typeof nestedPayload.properties === 'object'
-      ? (nestedPayload.properties as Record<string, unknown>)
-      : undefined) ??
-    (record.properties && typeof record.properties === 'object'
-      ? (record.properties as Record<string, unknown>)
-      : undefined);
-  const info =
-    (properties?.info && typeof properties.info === 'object'
-      ? (properties.info as Record<string, unknown>)
-      : undefined) ??
-    (record.info && typeof record.info === 'object'
-      ? (record.info as Record<string, unknown>)
-      : undefined);
-  const type =
-    (record.type as string | undefined) ??
-    (record.event as string | undefined) ??
-    (nestedPayload?.type as string | undefined) ??
-    eventType;
-  if (!type || !type.toLowerCase().includes('message.updated')) return null;
-  const finish =
-    (typeof info?.finish === 'string' ? (info.finish as string) : undefined) ??
-    (typeof record.finish === 'string' ? (record.finish as string) : undefined);
-  const error = parseMessageError(info);
-  if (!finish && !error) return null;
-  const sessionId =
-    typeof info?.sessionID === 'string'
-      ? (info.sessionID as string)
-      : typeof (record.sessionID as string | undefined) === 'string'
-        ? (record.sessionID as string)
-        : undefined;
-  const infoMessageId = typeof info?.messageId === 'string' ? info.messageId : undefined;
-  const messageId = typeof info?.id === 'string' ? (info.id as string) : infoMessageId;
-  const parentID = typeof info?.parentID === 'string' ? (info.parentID as string) : undefined;
-  return { finish, sessionId, messageId, parentID, error };
-}
-
-function parseMessageError(
-  info: Record<string, unknown> | undefined,
-): { name: string; message: string } | null {
-  const error = info?.error;
-  if (!error || typeof error !== 'object') return null;
-  const record = error as Record<string, unknown>;
-  const name = typeof record.name === 'string' ? record.name : '';
-  const data =
-    record.data && typeof record.data === 'object'
-      ? (record.data as Record<string, unknown>)
-      : undefined;
-  const message =
-    typeof data?.message === 'string'
-      ? data.message
-      : typeof record.message === 'string'
-        ? record.message
-        : '';
-  if (!name) return null;
-  return { name, message };
-}
-
-function parseSummaryDiffs(info: Record<string, unknown> | undefined): Array<MessageDiffEntry> {
-  const summary =
-    info?.summary && typeof info.summary === 'object'
-      ? (info.summary as Record<string, unknown>)
-      : undefined;
-  const diffs = Array.isArray(summary?.diffs) ? summary.diffs : [];
-  const result: Array<MessageDiffEntry> = [];
-  for (const d of diffs) {
-    if (!d || typeof d !== 'object') continue;
-    const rec = d as Record<string, unknown>;
-    const file = typeof rec.file === 'string' ? rec.file : '';
-    const before = typeof rec.before === 'string' ? rec.before : undefined;
-    const after = typeof rec.after === 'string' ? rec.after : undefined;
-    if (!file) continue;
-    result.push({ file, diff: '', before, after });
-  }
-  return result;
-}
-
 function formatRetryTime(timestamp: number): string {
   const nextDate = new Date(timestamp);
   const now = Date.now();
@@ -5802,41 +5074,6 @@ function handlePtyEvent(event: {
     if (event.info.status === 'exited') {
       lingerAndRemoveShellWindow(event.info.id);
     }
-  }
-}
-
-async function reconnectAndReconcile() {
-  if (reconnectInFlight) return;
-  reconnectInFlight = true;
-  try {
-    await ge.connect({ failFast: true, timeoutMs: 5000 });
-    if (!serverState.bootstrapped.value) {
-      await new Promise<void>((resolve) => {
-        const stop = watch(
-          bootstrapReady,
-          (ready) => {
-            if (!ready) return;
-            stop();
-            resolve();
-          },
-          { immediate: true },
-        );
-      });
-    }
-    await fetchProviders(true);
-    connectionState.value = 'ready';
-    reconnectingMessage.value = '';
-    sendStatus.value = 'Ready';
-  } catch (error) {
-    reconnectingMessage.value = `Reconnecting... ${toErrorMessage(error)}`;
-    if (!reconnectTimer) {
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        void reconnectAndReconcile();
-      }, 1000);
-    }
-  } finally {
-    reconnectInFlight = false;
   }
 }
 
