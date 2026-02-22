@@ -136,17 +136,32 @@
           </button>
         </div>
       </div>
-      <div v-if="commandPopupOpen" class="command-popup">
-        <div
-          v-for="(command, index) in commandMatches"
-          :key="command.name"
-          class="command-item"
-          :class="{ 'is-active': index === activeCommandIndex }"
-          @mousedown.prevent="selectCommand(command.name)"
+      <div class="command-dropdown-wrapper">
+        <Dropdown
+          ref="commandDropdownRef"
+          :open="commandPopupOpen"
+          :auto-close="false"
+          :auto-focus="false"
+          :auto-highlight="true"
+          popup-class="command-popup"
+          @select="handleCommandSelect"
         >
-          <div class="command-name">/{{ command.name }}</div>
-          <div v-if="command.description" class="command-desc">{{ command.description }}</div>
-        </div>
+          <template #trigger><span /></template>
+          <template #default>
+            <div class="dropdown-list">
+              <DropdownItem
+                v-for="command in commandMatches"
+                :key="command.name"
+                :value="command.name"
+              >
+                <div>
+                <div class="command-name">/{{ command.name }}</div>
+                <div v-if="command.description" class="command-desc">{{ command.description }}</div>
+                </div>
+              </DropdownItem>
+            </div>
+          </template>
+        </Dropdown>
       </div>
       <div class="input-toolbar">
         <div class="input-selects">
@@ -386,8 +401,6 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const modelDropdownRef = ref<HTMLElement | null>(null);
 const modelSearchQuery = ref('');
-
-const activeCommandIndex = ref(0);
 const acceptMime = 'image/png,image/jpeg,image/gif,image/webp';
 
 const { enterToSend, suppressAutoWindows } = useSettings();
@@ -399,10 +412,13 @@ const favoritesOpen = ref(false);
 
 type DropdownRef = {
   moveHighlight: (direction: 'up' | 'down') => void;
+  selectHighlighted: () => boolean;
+  clearHighlight: () => void;
 };
 
 const historyDropdownRef = ref<DropdownRef | null>(null);
 const favoritesDropdownRef = ref<DropdownRef | null>(null);
+const commandDropdownRef = ref<DropdownRef | null>(null);
 
 type HistoryEntry = {
   text: string;
@@ -560,40 +576,20 @@ const commandMatches = computed(() => {
   return matches.slice(0, limit);
 });
 
-const commandPopupOpen = computed(() => commandMatches.value.length > 0);
+const commandPopupDismissed = ref(false);
 
+const commandPopupOpen = computed(() => !commandPopupDismissed.value && commandMatches.value.length > 0);
 watch(slashQuery, () => {
-  activeCommandIndex.value = 0;
+  commandPopupDismissed.value = false;
 });
 
-watch(commandMatches, (matches) => {
-  if (matches.length === 0) {
-    activeCommandIndex.value = 0;
-    return;
-  }
-  if (activeCommandIndex.value >= matches.length) {
-    activeCommandIndex.value = matches.length - 1;
-  }
-});
+function handleCommandSelect(name: unknown) {
+  if (typeof name === 'string') applyCommandSelection(name);
+}
 
 function applyCommandSelection(name: string) {
-  const current = messageValue.value;
-  const rest = current.replace(/^\/\S*/, '');
-  const nextRest = rest.length > 0 ? rest : ' ';
-  messageValue.value = `/${name}${nextRest}`;
-  nextTick(() => {
-    textareaRef.value?.focus();
-  });
-}
-
-function selectCommand(name: string) {
-  applyCommandSelection(name);
-}
-
-function selectActiveCommand() {
-  const match = commandMatches.value[activeCommandIndex.value];
-  if (!match) return;
-  applyCommandSelection(match.name);
+  messageValue.value = `/${name} `;
+  nextTick(() => textareaRef.value?.focus());
 }
 
 function extractSlashCommand(value: string) {
@@ -671,16 +667,19 @@ function handleModelDropdownOpenChange(open: boolean) {
 
 function handleKeydown(event: KeyboardEvent) {
   if (commandPopupOpen.value) {
-    const total = commandMatches.value.length;
-    if (total === 0) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      commandPopupDismissed.value = true;
+      return;
+    }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      activeCommandIndex.value = (activeCommandIndex.value + 1) % total;
+      commandDropdownRef.value?.moveHighlight('down');
       return;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      activeCommandIndex.value = (activeCommandIndex.value - 1 + total) % total;
+      commandDropdownRef.value?.moveHighlight('up');
       return;
     }
     if (
@@ -691,7 +690,7 @@ function handleKeydown(event: KeyboardEvent) {
       !event.altKey
     ) {
       event.preventDefault();
-      selectActiveCommand();
+      commandDropdownRef.value?.selectHighlighted();
       return;
     }
     if (
@@ -702,7 +701,7 @@ function handleKeydown(event: KeyboardEvent) {
       !event.altKey
     ) {
       event.preventDefault();
-      selectActiveCommand();
+      commandDropdownRef.value?.selectHighlighted();
     }
     return;
   }
@@ -932,7 +931,6 @@ function focus() {
 function reset() {
   historyOpen.value = false;
   favoritesOpen.value = false;
-  activeCommandIndex.value = 0;
   modelSearchQuery.value = '';
 }
 
@@ -1291,11 +1289,25 @@ const inputMessageStyle = computed(() => {
   justify-content: center;
 }
 
-.command-popup {
+.command-dropdown-wrapper {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
-  bottom: calc(100% + 8px);
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.command-dropdown-wrapper :deep(.ui-dropdown-menu) {
+  pointer-events: auto;
+}
+
+:deep(.command-popup) {
+  /* Open upward instead of downward */
+  top: auto;
+  bottom: anchor(top);
+  margin-top: 0;
+  margin-bottom: 8px;
   background: rgba(2, 6, 23, 0.98);
   border: 1px solid #334155;
   border-radius: 10px;
@@ -1303,28 +1315,13 @@ const inputMessageStyle = computed(() => {
   box-shadow: 0 12px 24px rgba(2, 6, 23, 0.45);
   max-height: 220px;
   overflow: auto;
+  outline: none;
   z-index: 5;
 }
-
-.command-item {
-  padding: 6px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.command-item.is-active {
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.45);
-}
-
 .command-name {
   font-size: 12px;
   color: #e2e8f0;
 }
-
 .command-desc {
   font-size: 11px;
   color: #94a3b8;
