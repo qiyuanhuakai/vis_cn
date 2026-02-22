@@ -5152,25 +5152,19 @@ async function handleEditMessage(payload: { sessionId: string; part: MessagePart
   }
 }
 
-function toFileViewerKey(path: string, line?: number, endLine?: number) {
-  if (!line) return `file-viewer:${path}`;
-  if (endLine && endLine > line) {
-    return `file-viewer:${path}:${line}-${endLine}`;
-  }
-  return `file-viewer:${path}:${line}`;
+function toFileViewerKey(path: string, lines?: string) {
+  if (!lines) return `file-viewer:${path}`;
+  return `file-viewer:${path}:${lines}`;
 }
 
-function toFileViewerTitle(path: string, line?: number, endLine?: number) {
+function toFileViewerTitle(path: string, lines?: string) {
   const base = resolveWorktreeRelativePath(path) || path;
-  if (!line) return base;
-  if (endLine && endLine > line) {
-    return `${base}:${line}-${endLine}`;
-  }
-  return `${base}:${line}`;
+  if (!lines) return base;
+  return `${base}:${lines}`;
 }
 
-async function openFileViewer(path: string, line?: number, endLine?: number) {
-  const key = toFileViewerKey(path, line, endLine);
+async function openFileViewer(path: string, lines?: string) {
+  const key = toFileViewerKey(path, lines);
   if (fw.has(key)) {
     fw.bringToFront(key);
     return;
@@ -5182,30 +5176,27 @@ async function openFileViewer(path: string, line?: number, endLine?: number) {
     props: {
       path,
       lang,
-      line,
-      endLine,
+      lines,
       gutterMode: 'default',
       theme: shikiTheme.value,
     },
     closable: true,
     resizable: true,
     scroll: 'manual',
-    title: toFileViewerTitle(path, line, endLine),
+    title: toFileViewerTitle(path, lines),
     x: pos.x,
     y: pos.y,
     width: FILE_VIEWER_WINDOW_WIDTH,
     height: FILE_VIEWER_WINDOW_HEIGHT,
     expiry: Infinity,
   });
-
   const directory = activeDirectory.value.trim();
   if (!directory) {
     fw.updateOptions(key, {
       props: {
         path,
         rawHtml: 'No active directory selected.',
-        line,
-        endLine,
+        lines,
         gutterMode: 'none',
         theme: shikiTheme.value,
       },
@@ -5215,7 +5206,6 @@ async function openFileViewer(path: string, line?: number, endLine?: number) {
 
   try {
     const requestPath = splitFileContentDirectoryAndPath(path, directory);
-
     const data = (await opencodeApi.readFileContent({
       directory: requestPath.directory,
       path: requestPath.path,
@@ -5230,8 +5220,7 @@ async function openFileViewer(path: string, line?: number, endLine?: number) {
             path,
             rawHtml:
               'Binary content is not included in this API response.\nUnable to render hexdump for this file.',
-            line,
-            endLine,
+            lines,
             gutterMode: 'none',
             isBinary: false,
             theme: shikiTheme.value,
@@ -5246,8 +5235,7 @@ async function openFileViewer(path: string, line?: number, endLine?: number) {
         props: {
           path,
           rawHtml: `<pre class="shiki"><code>${dump}</code></pre>`,
-          line,
-          endLine,
+          lines,
           gutterMode: 'none',
           isBinary: true,
           theme: shikiTheme.value,
@@ -5262,8 +5250,7 @@ async function openFileViewer(path: string, line?: number, endLine?: number) {
         path,
         fileContent: textContent,
         lang: resolvedLang,
-        line,
-        endLine,
+        lines,
         gutterMode: 'default',
         isBinary: false,
         theme: shikiTheme.value,
@@ -5274,8 +5261,7 @@ async function openFileViewer(path: string, line?: number, endLine?: number) {
       props: {
         path,
         rawHtml: `File load failed: ${toErrorMessage(error)}`,
-        line,
-        endLine,
+        lines,
         gutterMode: 'none',
         isBinary: false,
         theme: shikiTheme.value,

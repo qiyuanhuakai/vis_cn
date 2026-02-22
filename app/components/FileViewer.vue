@@ -37,8 +37,7 @@ const props = defineProps<{
   diffTabs?: Array<{ file: string; before: string; after: string }>;
   gutterMode?: 'default' | 'none' | 'grep-source';
   theme?: string;
-  line?: number;
-  endLine?: number;
+  lines?: string;
 }>();
 
 const activeTabIndex = ref(0);
@@ -136,38 +135,45 @@ function clearLineHighlights() {
   });
 }
 
+function parseLineSpecs(raw?: string): Array<{ start: number; end: number }> {
+  if (!raw) return [];
+  const specs: Array<{ start: number; end: number }> = [];
+  for (const part of raw.split(',')) {
+    const m = part.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) continue;
+    const s = Number(m[1]);
+    const e = m[2] != null ? Number(m[2]) : s;
+    if (s >= 1 && e >= s) specs.push({ start: s, end: e });
+  }
+  return specs;
+}
 function applyLineSelection() {
   const root = viewerBodyEl.value;
   if (!root) return;
-
   clearLineHighlights();
 
-  const line = props.line;
-  if (!line || !Number.isInteger(line) || line < 1) return;
-
+  const specs = parseLineSpecs(props.lines);
+  if (specs.length === 0) return;
   const rows = Array.from(root.querySelectorAll<HTMLElement>('.code-row'));
   if (rows.length === 0) return;
-
-  const start = line;
-  const rawEndLine = props.endLine;
-  const end =
-    rawEndLine && Number.isInteger(rawEndLine) && rawEndLine >= start ? rawEndLine : start;
-  const clampedStart = Math.min(start, rows.length);
-  const clampedEnd = Math.min(Math.max(end, clampedStart), rows.length);
-
-  for (let index = clampedStart - 1; index < clampedEnd; index += 1) {
-    rows[index]?.classList.add('line-highlight');
+  for (const { start, end } of specs) {
+    const clampedStart = Math.min(start, rows.length);
+    const clampedEnd = Math.min(end, rows.length);
+    for (let index = clampedStart - 1; index < clampedEnd; index += 1) {
+      rows[index]?.classList.add('line-highlight');
+    }
   }
 
-  rows[clampedStart - 1]?.scrollIntoView({ block: 'center', inline: 'nearest' });
+  // Scroll to first highlighted line
+  const firstStart = Math.min(specs[0].start, rows.length);
+  rows[firstStart - 1]?.scrollIntoView({ block: 'center', inline: 'nearest' });
 }
 
 watch(
   [
     () => renderedHtml.value,
     () => props.rawHtml,
-    () => props.line,
-    () => props.endLine,
+    () => props.lines,
     () => activeTabIndex.value,
   ],
   () => {

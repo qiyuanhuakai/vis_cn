@@ -125,7 +125,7 @@ const emit = defineEmits<{
   (event: 'show-message-diff', payload: { messageKey: string; diffs: MessageDiffEntry[] }): void;
   (event: 'open-image', payload: { url: string; filename: string }): void;
   (event: 'show-thread-history', payload: { entries: HistoryWindowEntry[] }): void;
-  (event: 'open-file', path: string, line?: number, endLine?: number): void;
+  (event: 'open-file', path: string, lines?: string): void;
   (event: 'show-commit', hash: string): void;
   (event: 'message-rendered'): void;
   (event: 'content-resized'): void;
@@ -255,8 +255,8 @@ function handleContentClick(event: MouseEvent) {
   emit('show-commit', hash);
 }
 
-function handlePopupOpenFile(path: string, line?: number, endLine?: number) {
-  emit('open-file', path, line, endLine);
+function handlePopupOpenFile(path: string, lines?: string) {
+  emit('open-file', path, lines);
 }
 
 function setupContentResizeObserver() {

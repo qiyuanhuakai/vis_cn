@@ -36,9 +36,7 @@ type MarkdownRenderEnv = {
 
 type ParsedInlineFileRef = {
   path: string;
-  line?: number;
-  column?: number;
-  endLine?: number;
+  lines?: string;
 };
 
 const HEX_COLOR_REF_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -48,32 +46,19 @@ function isInlineColorRef(value: string) {
   return HEX_COLOR_REF_RE.test(value) || FUNC_COLOR_REF_RE.test(value);
 }
 
-function parsePositiveInt(raw?: string) {
-  if (!raw) return undefined;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) return undefined;
-  return value;
-}
 
 function parseInlineFileRef(rawRef: string, fileSet: Set<string>): ParsedInlineFileRef | null {
   const ref = rawRef.trim();
   if (!ref) return null;
   if (fileSet.has(ref)) return { path: ref };
-
-  const match = /^(.+?):(\d+)(?:(?::(\d+))|(?:-(\d+)))?$/.exec(ref);
+  const match = /^(.+?):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/.exec(ref);
   if (!match) return null;
-
-  const path = (match[1] ?? '').trim();
+  const path = match[1];
   if (!path || !fileSet.has(path)) return null;
+  const lines = (match[2] ?? '').trim();
+  if (!lines) return null;
 
-  const line = parsePositiveInt(match[2]);
-  if (!line) return null;
-
-  const column = parsePositiveInt(match[3]);
-  const endLineRaw = parsePositiveInt(match[4]);
-  const endLine = endLineRaw && endLineRaw >= line ? endLineRaw : undefined;
-
-  return { path, line, column, endLine };
+  return { path, lines };
 }
 
 let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighter>>> | null = null;
@@ -909,9 +894,7 @@ function getMarkdownIt(highlighter: Highlighter, theme: string) {
       const parsed = fileSet && ref ? parseInlineFileRef(ref, fileSet) : null;
       if (parsed) {
         token.attrSet('data-file-ref', parsed.path);
-        if (parsed.line) token.attrSet('data-file-line', String(parsed.line));
-        if (parsed.column) token.attrSet('data-file-col', String(parsed.column));
-        if (parsed.endLine) token.attrSet('data-file-end-line', String(parsed.endLine));
+        if (parsed.lines) token.attrSet('data-file-lines', parsed.lines);
         token.attrJoin('class', 'file-ref');
       } else if (/^[0-9a-f]{7,40}$/i.test(ref)) {
         token.attrSet('data-commit-ref', ref);

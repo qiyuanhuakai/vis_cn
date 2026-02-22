@@ -20,14 +20,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'open-file', path: string, line?: number, endLine?: number): void;
+  (event: 'open-file', path: string, lines?: string): void;
 }>();
 
 const filePopup = reactive({
   visible: false,
   candidates: [] as string[],
-  line: undefined as number | undefined,
-  endLine: undefined as number | undefined,
+  lines: undefined as string | undefined,
   style: {} as Record<string, string>,
 });
 
@@ -42,16 +41,10 @@ function resolveFileRef(ref: string): string[] {
 function closeFilePopup() {
   filePopup.visible = false;
   filePopup.candidates = [];
-  filePopup.line = undefined;
-  filePopup.endLine = undefined;
+  filePopup.lines = undefined;
 }
 
-function showFilePopup(
-  anchorEl: HTMLElement,
-  candidates: string[],
-  line?: number,
-  endLine?: number,
-) {
+function showFilePopup(anchorEl: HTMLElement, candidates: string[], lines?: string) {
   const rect = anchorEl.getBoundingClientRect();
   const maxWidth = Math.min(window.innerWidth - 16, 480);
   const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - maxWidth - 8));
@@ -62,53 +55,35 @@ function showFilePopup(
     maxWidth: `${maxWidth}px`,
   };
   filePopup.candidates = candidates;
-  filePopup.line = line;
-  filePopup.endLine = endLine;
+  filePopup.lines = lines;
   filePopup.visible = true;
 }
 
 function openFileFromPopup(path: string) {
-  const line = filePopup.line;
-  const endLine = filePopup.endLine;
+  const lines = filePopup.lines;
   closeFilePopup();
-  emit('open-file', path, line, endLine);
-}
-
-function parsePositiveInt(raw?: string) {
-  if (!raw) return undefined;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) return undefined;
-  return value;
+  emit('open-file', path, lines);
 }
 
 function handleContentClick(event: MouseEvent) {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-
   if (filePopup.visible && !target.closest('.file-ref-popup')) {
     closeFilePopup();
   }
-
   const fileRefEl = target.closest('[data-file-ref]');
   if (!(fileRefEl instanceof HTMLElement)) return;
-
   const rawRef = fileRefEl.dataset.fileRef;
   const ref = rawRef?.trim();
   if (!ref) return;
-
-  const line = parsePositiveInt(fileRefEl.dataset.fileLine);
-  let endLine = parsePositiveInt(fileRefEl.dataset.fileEndLine);
-  if (line && endLine && endLine < line) {
-    endLine = line;
-  }
-
+  const lines = fileRefEl.dataset.fileLines?.trim() || undefined;
   const candidates = resolveFileRef(ref);
   if (candidates.length === 0) return;
   if (candidates.length === 1) {
-    emit('open-file', candidates[0], line, endLine);
+    emit('open-file', candidates[0], lines);
     return;
   }
-  showFilePopup(fileRefEl, candidates, line, endLine);
+  showFilePopup(fileRefEl, candidates, lines);
 }
 
 defineExpose({
