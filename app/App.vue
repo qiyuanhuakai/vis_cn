@@ -1034,6 +1034,23 @@ const topPanelTreeData = computed<TopPanelWorktree[]>(() => {
   return entries;
 });
 
+// Navigable session tree: mirrors TopPanel's displayedTree (no-search mode).
+// Filters archived sessions, truncates per-sandbox, and drops empty worktrees.
+const NAVIGABLE_MAX_SESSIONS = 5;
+const navigableTree = computed(() => {
+  return topPanelTreeData.value
+    .map((worktree) => ({
+      ...worktree,
+      sandboxes: worktree.sandboxes
+        .map((sandbox) => ({
+          ...sandbox,
+          sessions: sandbox.sessions.filter((s) => !s.archivedAt).slice(0, NAVIGABLE_MAX_SESSIONS),
+        }))
+        .filter((sandbox) => worktree.projectId !== 'global' || sandbox.sessions.length > 0),
+    }))
+    .filter((worktree) => worktree.sandboxes.some((sandbox) => sandbox.sessions.length > 0));
+});
+
 const allowedSessionIds = computed(() => {
   const rootId = selectedSessionId.value;
   if (!rootId) return new Set<string>();
@@ -3783,6 +3800,52 @@ async function sendMessage() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Alt-Arrow session / project navigation helpers
+// ---------------------------------------------------------------------------
+
+function switchSessionByDirection(delta: number) {
+  const tree = navigableTree.value;
+  const currentProjectId = selectedProjectId.value;
+  const worktree = tree.find((w) => w.projectId === currentProjectId);
+  if (!worktree) return;
+
+  // Flatten sessions across all sandboxes in display order
+  const flatSessions = worktree.sandboxes.flatMap((s) => s.sessions);
+  if (flatSessions.length === 0) return;
+
+  const currentIndex = flatSessions.findIndex((s) => s.id === selectedSessionId.value);
+  if (currentIndex < 0) {
+    // Current session not in navigable list — jump to first
+    void switchSessionSelection(currentProjectId, flatSessions[0].id);
+    return;
+  }
+
+  const nextIndex = (currentIndex + delta + flatSessions.length) % flatSessions.length;
+  const target = flatSessions[nextIndex];
+  if (target.id !== selectedSessionId.value) {
+    void switchSessionSelection(currentProjectId, target.id);
+  }
+}
+
+function switchProjectByDirection(delta: number) {
+  const tree = navigableTree.value;
+  if (tree.length === 0) return;
+
+  const currentIndex = tree.findIndex((w) => w.projectId === selectedProjectId.value);
+  const baseIndex = currentIndex < 0 ? 0 : currentIndex;
+  const nextIndex = (baseIndex + delta + tree.length) % tree.length;
+  const target = tree[nextIndex];
+  if (!target?.projectId) return;
+
+  // Pick the most recently updated session in the target project
+  const allSessions = target.sandboxes.flatMap((s) => s.sessions);
+  if (allSessions.length === 0) return;
+
+  const best = allSessions.reduce((a, b) => ((a.timeUpdated ?? 0) >= (b.timeUpdated ?? 0) ? a : b));
+  void switchSessionSelection(target.projectId, best.id);
+}
+
 let lastEscTime = 0;
 let lastCtrlGTime = 0;
 const DOUBLE_ESC_THRESHOLD = 500;
@@ -3833,6 +3896,30 @@ function handleGlobalKeydown(event: KeyboardEvent) {
       lastCtrlGTime = now;
       topPanelRef.value?.toggleSessionDropdown();
     }
+    return;
+  }
+
+  // Alt-Left/Right: switch session within the same project
+  if (
+    event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+  ) {
+    event.preventDefault();
+    switchSessionByDirection(event.key === 'ArrowLeft' ? 1 : -1);
+    return;
+  }
+
+  // Alt-Up/Down: switch to a different project
+  if (
+    event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+  ) {
+    event.preventDefault();
+    switchProjectByDirection(event.key === 'ArrowUp' ? -1 : 1);
     return;
   }
 
