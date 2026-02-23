@@ -583,7 +583,7 @@ const commandPopupDismissed = ref(false);
 const commandPopupOpen = computed(
   () => !commandPopupDismissed.value && commandMatches.value.length > 0,
 );
-watch(slashQuery, () => {
+watch(() => messageValue.value, () => {
   commandPopupDismissed.value = false;
 });
 
