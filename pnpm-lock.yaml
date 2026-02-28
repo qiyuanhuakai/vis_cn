@@ -8,6 +8,13 @@ importers:
 
   .:
     dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.12.3)
+      hono:
+        specifier: ^4.12.3
+        version: 4.12.3
+    devDependencies:
       '@iconify/vue':
         specifier: ^5.0.0
         version: 5.0.0(vue@3.5.28(typescript@5.9.3))
@@ -20,19 +27,6 @@ importers:
       '@shikijs/transformers':
         specifier: ^3.22.0
         version: 3.22.0
-      '@xterm/xterm':
-        specifier: ^6.0.0
-        version: 6.0.0
-      markdown-it:
-        specifier: ^14.1.1
-        version: 14.1.1
-      shiki:
-        specifier: ^3.22.0
-        version: 3.22.0
-      vue:
-        specifier: ^3.5.28
-        version: 3.5.28(typescript@5.9.3)
-    devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
@@ -48,9 +42,15 @@ importers:
       '@vitejs/plugin-vue':
         specifier: ^6.0.4
         version: 6.0.4(vite@7.3.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2))(vue@3.5.28(typescript@5.9.3))
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       autoprefixer:
         specifier: ^10.4.24
         version: 10.4.24(postcss@8.5.6)
+      markdown-it:
+        specifier: ^14.1.1
+        version: 14.1.1
       oxfmt:
         specifier: ^0.32.0
         version: 0.32.0
@@ -63,12 +63,18 @@ importers:
       postcss:
         specifier: ^8.5.6
         version: 8.5.6
+      shiki:
+        specifier: ^3.22.0
+        version: 3.22.0
       tailwindcss:
         specifier: ^4.1.18
         version: 4.1.18
       vite:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)
+      vue:
+        specifier: ^3.5.28
+        version: 3.5.28(typescript@5.9.3)
       vue-tsc:
         specifier: ^3.2.4
         version: 3.2.4(typescript@5.9.3)
@@ -251,6 +257,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@hono/node-server@1.19.9':
+    resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -1019,6 +1031,10 @@ packages:
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
 
+  hono@4.12.3:
+    resolution: {integrity: sha512-SFsVSjp8sj5UumXOOFlkZOG6XS9SJDKw0TbwFeV+AJ8xlST8kxK5Z/5EYa111UY8732lK2S/xB653ceuaoGwpg==}
+    engines: {node: '>=16.9.0'}
+
   html-void-elements@3.0.0:
     resolution: {integrity: sha512-bEqo66MRXsUGxWHV5IP0PUiAWwoEjba4VCzg0LjFJBpchPaTfyfCKTG6bc5F8ucKec3q5y6qOdGyYTSBEvhCrg==}
 
@@ -1435,6 +1451,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.2':
     optional: true
+
+  '@hono/node-server@1.19.9(hono@4.12.3)':
+    dependencies:
+      hono: 4.12.3
 
   '@iconify/types@2.0.0': {}
 
@@ -2033,6 +2053,8 @@ snapshots:
   hast-util-whitespace@3.0.0:
     dependencies:
       '@types/hast': 3.0.4
+
+  hono@4.12.3: {}
 
   html-void-elements@3.0.0: {}
 
