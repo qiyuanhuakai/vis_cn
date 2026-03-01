@@ -6,20 +6,54 @@
           <Icon :icon="branchIcon" :width="13" :height="13" class="tree-branch-icon" />
           <span class="tree-branch-name">{{ branchName }}</span>
         </span>
-        <span
+        <Dropdown
           v-if="branchInfo && branchInfo.ahead > 0"
-          class="tree-branch-ahead"
-          :title="`${branchInfo.ahead} commit(s) ahead of ${branchInfo.upstream ?? 'remote'}`"
+          v-model:open="pushMenuOpen"
+          class="tree-branch-command-dropdown"
+          auto-close
+          :popup-style="{ width: '120px' }"
+          @select="onBranchCommandSelect"
         >
-          <Icon icon="lucide:arrow-up" :width="11" :height="11" title="" />{{ branchInfo.ahead }}
-        </span>
-        <span
+          <template #trigger>
+            <button
+              type="button"
+              class="tree-branch-command-trigger"
+              :title="`${branchInfo.ahead} commit(s) ahead of ${branchInfo.upstream ?? 'remote'}`"
+              @click.stop="pushMenuOpen = !pushMenuOpen"
+            >
+              <span class="tree-branch-ahead">
+                <Icon icon="lucide:arrow-up" :width="11" :height="11" title="" />{{
+                  branchInfo.ahead
+                }}
+              </span>
+            </button>
+          </template>
+          <DropdownItem value="git push">git push</DropdownItem>
+        </Dropdown>
+        <Dropdown
           v-if="branchInfo && branchInfo.behind > 0"
-          class="tree-branch-behind"
-          :title="`${branchInfo.behind} commit(s) behind ${branchInfo.upstream ?? 'remote'}`"
+          v-model:open="pullMenuOpen"
+          class="tree-branch-command-dropdown"
+          auto-close
+          :popup-style="{ width: '120px' }"
+          @select="onBranchCommandSelect"
         >
-          <Icon icon="lucide:arrow-down" :width="11" :height="11" title="" />{{ branchInfo.behind }}
-        </span>
+          <template #trigger>
+            <button
+              type="button"
+              class="tree-branch-command-trigger"
+              :title="`${branchInfo.behind} commit(s) behind ${branchInfo.upstream ?? 'remote'}`"
+              @click.stop="pullMenuOpen = !pullMenuOpen"
+            >
+              <span class="tree-branch-behind">
+                <Icon icon="lucide:arrow-down" :width="11" :height="11" title="" />{{
+                  branchInfo.behind
+                }}
+              </span>
+            </button>
+          </template>
+          <DropdownItem value="git pull">git pull</DropdownItem>
+        </Dropdown>
         <span
           v-if="activeDiffStats && (activeDiffStats.additions > 0 || activeDiffStats.deletions > 0)"
           class="tree-branch-stats"
@@ -212,10 +246,13 @@ const emit = defineEmits<{
   (event: 'open-diff', payload: { path: string; staged: boolean }): void;
   (event: 'open-diff-all', payload: { mode: 'staged' | 'changes' | 'all' }): void;
   (event: 'open-file', path: string): void;
+  (event: 'run-git-command', command: string): void;
   (event: 'reload'): void;
 }>();
 
 const viewMode = ref<TreeViewMode>('all');
+const pushMenuOpen = ref(false);
+const pullMenuOpen = ref(false);
 const expanded = computed(() => new Set(props.expandedPaths));
 const branchIcon = computed(() => (props.branchInfo ? 'lucide:git-branch' : 'lucide:folder'));
 const branchName = computed(() => props.branchInfo?.branch ?? props.directoryName ?? 'no git');
@@ -486,6 +523,15 @@ function onDiffStatsClick() {
   emit('open-diff-all', { mode: viewMode.value });
 }
 
+function onBranchCommandSelect(value: unknown) {
+  if (typeof value !== 'string') return;
+  if (typeof window !== 'undefined') {
+    const confirmed = window.confirm(`Run "${value}"?`);
+    if (!confirmed) return;
+  }
+  emit('run-git-command', value);
+}
+
 function onTreeScrollClick(event: MouseEvent) {
   const target = event.target;
   if (!(target instanceof Element)) return;
@@ -541,6 +587,33 @@ function onRowDoubleClick(row: { node: TreeNode }) {
   white-space: nowrap;
   overflow: hidden;
   min-height: 20px;
+}
+
+.tree-branch-command-dropdown {
+  flex: 0 0 auto;
+  min-width: auto;
+}
+
+.tree-branch-command-trigger {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tree-branch-command-trigger:focus-visible {
+  outline: 1px solid rgba(96, 165, 250, 0.7);
+  outline-offset: 1px;
+}
+
+.tree-branch-command-trigger:hover .tree-branch-ahead {
+  background: rgba(74, 222, 128, 0.2);
+}
+
+.tree-branch-command-trigger:hover .tree-branch-behind {
+  background: rgba(248, 113, 113, 0.2);
 }
 
 .tree-branch-label {

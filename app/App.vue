@@ -61,6 +61,7 @@
               (payload: { mode: WorktreeSnapshotMode }) => openAllGitDiff(payload.mode)
             "
             @open-file="openFileViewer"
+            @run-git-command="runTreeGitCommand"
             @reload="reloadTree().then(() => refreshGitStatus())"
           />
           <div
@@ -3165,6 +3166,10 @@ async function openShellFromInput(input: string) {
   const { command, args } = parseShellArgs(input);
   const pty = await createPtySession(command, args);
   if (pty) ensureShellWindow(pty);
+}
+
+async function runTreeGitCommand(command: string) {
+  await openShellFromInput(command);
 }
 
 function decodeCommitSnapshotBase64(value: string) {
