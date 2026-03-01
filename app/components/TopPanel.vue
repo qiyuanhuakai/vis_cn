@@ -155,7 +155,7 @@
                           title="Create a new sandbox"
                           @click.stop="handleCreateWorktree(sandbox.directory, close)"
                         >
-                          <Icon icon="lucide:git-branch" :width="16" :height="16" />
+                          <Icon icon="lucide:git-branch-plus" :width="16" :height="16" />
                         </button>
                         <button
                           v-if="

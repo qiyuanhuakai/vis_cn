@@ -37,7 +37,7 @@
               :disabled="isBranchSwitchDisabled(entry)"
               :title="branchDisabledReason(entry)"
             >
-              <div class="tree-branch-menu-content">
+              <div class="tree-branch-menu-content" :class="{ 'is-muted': entry.isCurrent }">
                 <div class="tree-branch-menu-line1">
                   <Icon
                     v-if="entry.isCurrent"
@@ -59,12 +59,22 @@
               <template #action>
                 <div class="tree-branch-menu-actions">
                   <button
+                    v-if="canMergeBranch(entry)"
                     type="button"
-                    class="tree-branch-action-btn"
+                    class="tree-branch-action-btn tree-branch-merge-btn"
+                    title="Merge this ref into current branch"
+                    @click.stop="onBranchMerge(entry)"
+                  >
+                    <Icon icon="lucide:git-merge" :width="14" :height="14" />
+                  </button>
+                  <span v-else class="tree-branch-action-spacer"></span>
+                  <button
+                    type="button"
+                    class="tree-branch-action-btn tree-branch-fork-btn"
                     title="Create branch from this ref"
                     @click.stop="onBranchFork(entry)"
                   >
-                    <Icon icon="lucide:git-branch-plus" :width="12" :height="12" />
+                    <Icon icon="lucide:git-branch-plus" :width="14" :height="14" />
                   </button>
                   <button
                     v-if="canDeleteLocalBranch(entry)"
@@ -73,7 +83,7 @@
                     title="Delete local branch"
                     @click.stop="onBranchDelete(entry)"
                   >
-                    <Icon icon="lucide:trash-2" :width="12" :height="12" />
+                    <Icon icon="lucide:trash-2" :width="14" :height="14" />
                   </button>
                   <span v-else class="tree-branch-action-spacer"></span>
                 </div>
@@ -88,7 +98,7 @@
                 :disabled="isBranchSwitchDisabled(entry)"
                 :title="branchDisabledReason(entry)"
               >
-                <div class="tree-branch-menu-content">
+                <div class="tree-branch-menu-content" :class="{ 'is-muted': entry.isCurrent }">
                   <div class="tree-branch-menu-line1">
                     <span class="tree-branch-current-spacer"></span>
                     <span class="tree-branch-menu-name">{{ entry.displayName }}</span>
@@ -103,12 +113,22 @@
                 <template #action>
                   <div class="tree-branch-menu-actions">
                     <button
+                      v-if="canMergeBranch(entry)"
                       type="button"
-                      class="tree-branch-action-btn"
+                      class="tree-branch-action-btn tree-branch-merge-btn"
+                      title="Merge this ref into current branch"
+                      @click.stop="onBranchMerge(entry)"
+                    >
+                      <Icon icon="lucide:git-merge" :width="14" :height="14" />
+                    </button>
+                    <span v-else class="tree-branch-action-spacer"></span>
+                    <button
+                      type="button"
+                      class="tree-branch-action-btn tree-branch-fork-btn"
                       title="Create branch from this ref"
                       @click.stop="onBranchFork(entry)"
                     >
-                      <Icon icon="lucide:git-branch-plus" :width="12" :height="12" />
+                      <Icon icon="lucide:git-branch-plus" :width="14" :height="14" />
                     </button>
                     <span class="tree-branch-action-spacer"></span>
                   </div>
@@ -691,6 +711,7 @@ function branchSummary(entry: BranchEntry) {
 }
 
 function branchSwitchCommand(entry: BranchEntry) {
+  if (entry.isCurrent) return '';
   if (!entry.isLocal) {
     return `git switch --track ${shellQuote(entry.refnameShort)}`;
   }
@@ -698,8 +719,7 @@ function branchSwitchCommand(entry: BranchEntry) {
 }
 
 function isBranchSwitchDisabled(entry: BranchEntry) {
-  if (entry.isCurrent) return true;
-  if (entry.isWorktree) return true;
+  if (entry.isWorktree && !entry.isCurrent) return true;
   if (!entry.isLocal && entry.hasLocalCounterpart) return true;
   return false;
 }
@@ -715,6 +735,14 @@ function branchDisabledReason(entry: BranchEntry) {
 
 function canDeleteLocalBranch(entry: BranchEntry) {
   return entry.isLocal && !entry.isCurrent && !entry.isWorktree;
+}
+
+function canMergeBranch(entry: BranchEntry) {
+  return !entry.isCurrent;
+}
+
+function branchMergeTarget(entry: BranchEntry) {
+  return entry.isLocal ? entry.displayName : entry.refnameShort;
 }
 
 function onBranchPickerToggle() {
@@ -738,6 +766,17 @@ function onBranchFork(entry: BranchEntry) {
   void props.runShellCommand?.(
     `git switch -c ${shellQuote(nextName)} ${shellQuote(entry.refnameShort)}`,
   );
+}
+
+function onBranchMerge(entry: BranchEntry) {
+  if (!canMergeBranch(entry)) return;
+  const target = branchMergeTarget(entry);
+  if (typeof window !== 'undefined') {
+    const confirmed = window.confirm(`Merge "${target}" into current branch?`);
+    if (!confirmed) return;
+  }
+  branchMenuOpen.value = false;
+  void props.runShellCommand?.(`git merge ${shellQuote(target)}`);
 }
 
 function onBranchDelete(entry: BranchEntry) {
@@ -851,6 +890,10 @@ function onRowDoubleClick(row: { node: TreeNode }) {
   flex: 1;
 }
 
+.tree-branch-menu-content.is-muted {
+  opacity: 0.6;
+}
+
 .tree-branch-menu-line1,
 .tree-branch-menu-line2 {
   display: flex;
@@ -898,32 +941,35 @@ function onRowDoubleClick(row: { node: TreeNode }) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--color-slate-700);
+  border-radius: 6px;
   padding: 0;
-  background: transparent;
-  color: #94a3b8;
+  background: var(--color-slate-950);
+  color: var(--color-slate-400);
   cursor: pointer;
 }
 
 .tree-branch-action-btn:hover {
-  background: rgba(51, 65, 85, 0.55);
-  color: #cbd5e1;
+  background: var(--color-slate-800);
+}
+
+.tree-branch-merge-btn {
+  color: var(--color-purple-300);
+}
+
+.tree-branch-fork-btn {
+  color: var(--color-blue-300);
 }
 
 .tree-branch-delete-btn {
-  color: #b08a8e;
-}
-
-.tree-branch-delete-btn:hover {
-  color: #fca5a5;
+  color: var(--color-red-300);
 }
 
 .tree-branch-action-spacer {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
 }
 
