@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue';
-import { StorageKeys, storageGetJSON, storageKey, storageSetJSON } from '../utils/storageKeys';
+import { StorageKeys, storageGet, storageKey, storageSetJSON } from '../utils/storageKeys';
 
 export type FavoriteMessageEntry = {
   text: string;
@@ -9,8 +9,50 @@ export type FavoriteMessageEntry = {
   variant?: string;
 };
 
+function toFavoriteMessageEntry(value: unknown): FavoriteMessageEntry | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.text !== 'string') return null;
+  const entry: FavoriteMessageEntry = {
+    text: record.text,
+  };
+  if (typeof record.agent === 'string') entry.agent = record.agent;
+  if (typeof record.agentColor === 'string') entry.agentColor = record.agentColor;
+  if (typeof record.model === 'string') entry.model = record.model;
+  if (typeof record.variant === 'string') entry.variant = record.variant;
+  return entry;
+}
+
+function parseFavoriteMessages(raw: string | null): FavoriteMessageEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => toFavoriteMessageEntry(item))
+      .filter((item): item is FavoriteMessageEntry => Boolean(item));
+  } catch {
+    return [];
+  }
+}
+
+function isSameFavoriteMessages(a: FavoriteMessageEntry[], b: FavoriteMessageEntry[]) {
+  if (a.length !== b.length) return false;
+  return a.every((item, index) => {
+    const next = b[index];
+    return (
+      next &&
+      item.text === next.text &&
+      (item.agent ?? '') === (next.agent ?? '') &&
+      (item.agentColor ?? '') === (next.agentColor ?? '') &&
+      (item.model ?? '') === (next.model ?? '') &&
+      (item.variant ?? '') === (next.variant ?? '')
+    );
+  });
+}
+
 const favorites = ref<FavoriteMessageEntry[]>(
-  storageGetJSON<FavoriteMessageEntry[]>(StorageKeys.favorites.messages) ?? [],
+  parseFavoriteMessages(storageGet(StorageKeys.favorites.messages)),
 );
 
 watch(
@@ -18,13 +60,14 @@ watch(
   (value) => {
     storageSetJSON(StorageKeys.favorites.messages, value);
   },
-  { deep: true },
 );
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if (event.key !== storageKey(StorageKeys.favorites.messages)) return;
-    favorites.value = storageGetJSON<FavoriteMessageEntry[]>(StorageKeys.favorites.messages) ?? [];
+    const nextFavorites = parseFavoriteMessages(event.newValue);
+    if (isSameFavoriteMessages(favorites.value, nextFavorites)) return;
+    favorites.value = nextFavorites;
   });
 }
 

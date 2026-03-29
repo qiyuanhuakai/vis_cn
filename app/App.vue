@@ -626,6 +626,13 @@ type ComposerDraft = {
 
 type LocalPinnedSessionStore = Record<string, number>;
 
+function isSamePinnedSessionStore(a: LocalPinnedSessionStore, b: LocalPinnedSessionStore) {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((key) => a[key] === b[key]);
+}
+
 const fw = useFloatingWindows();
 
 // Close auto-opened floating windows when suppress is toggled ON.
@@ -1742,6 +1749,7 @@ function clearLocalPinnedSession(projectId: string, sessionId: string) {
 function reconcileLocalPinnedSessionStore() {
   if (!bootstrapReady.value) return;
   const currentStore = localPinnedSessionStore.value;
+  if (Object.keys(currentStore).length === 0) return;
   const nextStore: LocalPinnedSessionStore = { ...limitPinnedSessionStore(currentStore) };
   const activeSessionKeys = new Set<string>();
 
@@ -1768,12 +1776,7 @@ function reconcileLocalPinnedSessionStore() {
     }
   });
 
-  const currentKeys = Object.keys(currentStore);
-  const nextKeys = Object.keys(nextStore);
-  const changed =
-    currentKeys.length !== nextKeys.length ||
-    nextKeys.some((key) => currentStore[key] !== nextStore[key]);
-  if (!changed) return;
+  if (isSamePinnedSessionStore(currentStore, nextStore)) return;
   localPinnedSessionStore.value = nextStore;
 }
 
@@ -2073,7 +2076,9 @@ function handleComposerDraftStorage(event: StorageEvent) {
 function handlePinnedSessionStoreStorage(event: StorageEvent) {
   if (event.storageArea !== window.localStorage) return;
   if (event.key !== storageKey(StorageKeys.state.pinnedSessions)) return;
-  localPinnedSessionStore.value = limitPinnedSessionStore(parsePinnedSessionStore(event.newValue));
+  const nextStore = limitPinnedSessionStore(parsePinnedSessionStore(event.newValue));
+  if (isSamePinnedSessionStore(localPinnedSessionStore.value, nextStore)) return;
+  localPinnedSessionStore.value = nextStore;
 }
 
 function buildComposerDraftFromUserMessage(payload: {
@@ -2455,7 +2460,11 @@ async function handleSaveProject(payload: {
 async function createSessionInDirectory(directory: string) {
   const session = await openCodeApi.createSession(directory);
   if (!session?.id) return undefined;
-  await switchSessionSelection(session.projectID, session.id);
+  const nextProjectId = (session.projectID || selectedProjectId.value).trim();
+  if (nextProjectId) {
+    selectedProjectId.value = nextProjectId;
+  }
+  selectedSessionId.value = session.id;
   return session;
 }
 
@@ -2530,8 +2539,11 @@ async function createNewSession(): Promise<SessionInfo | undefined> {
     }
     const data = await openCodeApi.createSession(directory);
     if (data && typeof data.id === 'string') {
-      const nextProjectId = data.projectID;
-      await switchSessionSelection(nextProjectId, data.id);
+      const nextProjectId = (data.projectID || selectedProjectId.value).trim();
+      if (nextProjectId) {
+        selectedProjectId.value = nextProjectId;
+      }
+      selectedSessionId.value = data.id;
     }
     return data;
   } catch (error) {
@@ -2922,9 +2934,6 @@ async function bootstrapSelections() {
       await initializeSessionSelection();
     }
 
-    if (activeDirectory.value) {
-      await fetchCommands(activeDirectory.value);
-    }
   } finally {
     isBootstrapping.value = false;
   }
@@ -4425,11 +4434,7 @@ watch(
 
 watch(localPinnedSessionStore, (store) => {
   const limited = limitPinnedSessionStore(store);
-  const keys = Object.keys(store);
-  const limitedKeys = Object.keys(limited);
-  const changed =
-    keys.length !== limitedKeys.length || limitedKeys.some((key) => store[key] !== limited[key]);
-  if (changed) {
+  if (!isSamePinnedSessionStore(store, limited)) {
     localPinnedSessionStore.value = limited;
     return;
   }
@@ -4438,13 +4443,7 @@ watch(localPinnedSessionStore, (store) => {
 
 watch(pinnedSessionsLimit, () => {
   const limited = limitPinnedSessionStore(localPinnedSessionStore.value);
-  const current = localPinnedSessionStore.value;
-  const currentKeys = Object.keys(current);
-  const limitedKeys = Object.keys(limited);
-  const changed =
-    currentKeys.length !== limitedKeys.length ||
-    limitedKeys.some((key) => current[key] !== limited[key]);
-  if (!changed) return;
+  if (isSamePinnedSessionStore(localPinnedSessionStore.value, limited)) return;
   localPinnedSessionStore.value = limited;
 });
 
@@ -5715,10 +5714,12 @@ async function startInitialization() {
     }
     if (activeDirectory.value) {
       initLoadingMessage.value = 'Loading worktree state...';
-      await fetchCommands(activeDirectory.value || undefined);
       const directory = activeDirectory.value || undefined;
-      await fetchPendingPermissions(directory);
-      await fetchPendingQuestions(directory);
+      await Promise.all([
+        fetchCommands(directory),
+        fetchPendingPermissions(directory),
+        fetchPendingQuestions(directory),
+      ]);
       void refreshGitStatus();
     }
     connectionState.value = 'ready';

@@ -65,6 +65,14 @@ function isRootSession(session: SessionState) {
   return !(session.parentID && session.parentID.trim());
 }
 
+function isSameStringArray(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
+}
+
 function isSessionStatus(value: string): value is SessionStatusType {
   return value === 'busy' || value === 'idle' || value === 'retry';
 }
@@ -230,6 +238,8 @@ export function createStateBuilder() {
       .filter((session) => isRootSession(session))
       .sort((a, b) => toSortTime(b) - toSortTime(a))
       .map((session) => session.id);
+    const current = Array.isArray(sandbox.rootSessions) ? sandbox.rootSessions : [];
+    if (isSameStringArray(current, roots)) return;
     sandbox.rootSessions = roots;
   }
 
