@@ -1,21 +1,21 @@
 <template>
   <div class="question-window">
     <div class="question-header">
-      <div class="question-title">Question request</div>
-      <div class="question-type">{{ request.questions.length }} item(s)</div>
+      <div class="question-title">{{ $t('toolWindow.question.title') }}</div>
+      <div class="question-type">{{ $t('toolWindow.question.itemCount', { count: request.questions.length }) }}</div>
     </div>
 
     <div class="question-summary">
       <div class="question-row">
-        <div class="question-label">Session</div>
+        <div class="question-label">{{ $t('toolWindow.question.session') }}</div>
         <div class="question-value">{{ request.sessionID }}</div>
       </div>
       <div v-if="request.tool" class="question-row">
-        <div class="question-label">Tool</div>
+        <div class="question-label">{{ $t('toolWindow.question.tool') }}</div>
         <div class="question-value">
-          message {{ request.tool.messageID }}
+          {{ $t('toolWindow.question.message') }} {{ request.tool.messageID }}
           <span class="divider">/</span>
-          call {{ request.tool.callID }}
+          {{ $t('toolWindow.question.call') }} {{ request.tool.callID }}
         </div>
       </div>
     </div>
@@ -32,7 +32,7 @@
       >
         <div class="section-head">
           <div class="section-title">{{ item.header }}</div>
-          <div class="section-mode">{{ item.multiple ? 'Multiple' : 'Single' }}</div>
+          <div class="section-mode">{{ item.multiple ? $t('toolWindow.question.modeMultiple') : $t('toolWindow.question.modeSingle') }}</div>
         </div>
         <div class="section-question">{{ item.question }}</div>
 
@@ -57,7 +57,7 @@
             rows="3"
             :value="customAnswers[index] ?? ''"
             :disabled="isSubmitting"
-            placeholder="Type your own answer"
+            :placeholder="$t('toolWindow.question.customAnswer')"
             @input="updateCustom(index, $event)"
           ></textarea>
         </div>
@@ -73,7 +73,7 @@
         :disabled="isSubmitting"
         @click="emitReject"
       >
-        Reject
+        {{ $t('toolWindow.question.reject') }}
       </button>
       <button
         type="button"
@@ -81,7 +81,7 @@
         :disabled="isSubmitting || !canReply"
         @click="emitReply"
       >
-        Reply
+        {{ $t('toolWindow.question.reply') }}
       </button>
     </div>
   </div>

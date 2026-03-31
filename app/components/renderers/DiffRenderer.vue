@@ -13,7 +13,7 @@
       </button>
     </div>
     <div class="viewer-body">
-      <div v-if="showLoading" class="viewer-loading">Loading...</div>
+      <div v-if="showLoading" class="viewer-loading">{{ t('common.loading') }}</div>
       <CodeContent v-else :html="renderedHtml || ''" variant="diff" />
     </div>
   </div>
@@ -21,8 +21,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import CodeContent from '../CodeContent.vue';
 import { type CodeRenderParams, useCodeRender } from '../../utils/useCodeRender';
+
+const { t } = useI18n();
 import { guessLanguageFromPath } from '../ToolWindow/utils';
 
 const props = defineProps<{

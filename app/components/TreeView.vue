@@ -26,10 +26,10 @@
               />
             </button>
           </template>
-          <DropdownSearch v-model="branchSearchQuery" placeholder="Search branches" />
-          <div v-if="branchListLoading" class="tree-branch-menu-empty">Loading branches...</div>
+          <DropdownSearch v-model="branchSearchQuery" :placeholder="$t('treeView.searchBranches')" />
+          <div v-if="branchListLoading" class="tree-branch-menu-empty">{{ $t('treeView.loadingBranches') }}</div>
           <template v-else>
-            <DropdownLabel v-if="filteredLocalBranches.length > 0">Local</DropdownLabel>
+            <DropdownLabel v-if="filteredLocalBranches.length > 0">{{ $t('treeView.local') }}</DropdownLabel>
             <DropdownItem
               v-for="entry in filteredLocalBranches"
               :key="entry.refname"
@@ -62,7 +62,7 @@
                     v-if="canMergeBranch(entry)"
                     type="button"
                     class="tree-branch-action-btn tree-branch-merge-btn"
-                    title="Merge this ref into current branch"
+                    :title="$t('treeView.mergeRefTitle')"
                     @click.stop="onBranchMerge(entry)"
                   >
                     <Icon icon="lucide:git-merge" :width="14" :height="14" />
@@ -71,7 +71,7 @@
                   <button
                     type="button"
                     class="tree-branch-action-btn tree-branch-fork-btn"
-                    title="Create branch from this ref"
+                    :title="$t('treeView.createBranchTitle')"
                     @click.stop="onBranchFork(entry)"
                   >
                     <Icon icon="lucide:git-branch-plus" :width="14" :height="14" />
@@ -80,7 +80,7 @@
                     v-if="canDeleteLocalBranch(entry)"
                     type="button"
                     class="tree-branch-action-btn tree-branch-delete-btn"
-                    title="Delete local branch"
+                    :title="$t('treeView.deleteBranchTooltip')"
                     @click.stop="onBranchDelete(entry)"
                   >
                     <Icon icon="lucide:trash-2" :width="14" :height="14" />
@@ -96,7 +96,7 @@
                   <button
                     type="button"
                     class="tree-branch-action-btn tree-branch-fetch-btn"
-                    :title="`git fetch ${group.key}`"
+                    :title="$t('treeView.fetch', { remote: group.key })"
                     @click.stop="onRemoteFetch(group.key)"
                   >
                     <Icon icon="lucide:refresh-cw" :width="12" :height="12" />
@@ -128,7 +128,7 @@
                       v-if="canMergeBranch(entry)"
                       type="button"
                       class="tree-branch-action-btn tree-branch-merge-btn"
-                      title="Merge this ref into current branch"
+                    :title="$t('treeView.mergeTooltip')"
                       @click.stop="onBranchMerge(entry)"
                     >
                       <Icon icon="lucide:git-merge" :width="14" :height="14" />
@@ -137,7 +137,7 @@
                     <button
                       type="button"
                       class="tree-branch-action-btn tree-branch-fork-btn"
-                      title="Create branch from this ref"
+                    :title="$t('treeView.createBranchTooltip')"
                       @click.stop="onBranchFork(entry)"
                     >
                       <Icon icon="lucide:git-branch-plus" :width="14" :height="14" />
@@ -147,7 +147,7 @@
                 </template>
               </DropdownItem>
             </template>
-            <div v-if="!hasFilteredBranches" class="tree-branch-menu-empty">No branches found.</div>
+            <div v-if="!hasFilteredBranches" class="tree-branch-menu-empty">{{ $t('treeView.noBranches') }}</div>
           </template>
         </Dropdown>
         <Dropdown
@@ -162,7 +162,7 @@
             <button
               type="button"
               class="tree-branch-command-trigger"
-              :title="`${branchInfo.ahead} commit(s) ahead of ${branchInfo.upstream ?? 'remote'}`"
+              :title="$t('treeView.aheadOfRemote', { count: branchInfo.ahead, remote: branchInfo.upstream || $t('treeView.remoteFallback') })"
               @click.stop="pushMenuOpen = !pushMenuOpen"
             >
               <span class="tree-branch-ahead">
@@ -186,7 +186,7 @@
             <button
               type="button"
               class="tree-branch-command-trigger"
-              :title="`${branchInfo.behind} commit(s) behind ${branchInfo.upstream ?? 'remote'}`"
+              :title="$t('treeView.behindRemote', { count: branchInfo.behind, remote: branchInfo.upstream || $t('treeView.remoteFallback') })"
               @click.stop="pullMenuOpen = !pullMenuOpen"
             >
               <span class="tree-branch-behind">
@@ -237,7 +237,7 @@
           >
         </span>
       </div>
-      <div class="tree-tabs" role="tablist" aria-label="Tree mode">
+      <div class="tree-tabs" role="tablist" :aria-label="$t('treeView.treeMode')">
         <button
           type="button"
           class="tree-tab"
@@ -246,7 +246,7 @@
           :aria-selected="viewMode === 'staged'"
           @click="setViewMode('staged')"
         >
-          Staged
+          {{ $t('treeView.staged') }}
         </button>
         <button
           type="button"
@@ -256,7 +256,7 @@
           :aria-selected="viewMode === 'changes'"
           @click="setViewMode('changes')"
         >
-          Changes
+          {{ $t('treeView.changes') }}
         </button>
         <button
           type="button"
@@ -266,7 +266,7 @@
           :aria-selected="viewMode === 'all'"
           @click="setViewMode('all')"
         >
-          All files
+          {{ $t('treeView.allFiles') }}
         </button>
       </div>
     </div>
@@ -275,7 +275,7 @@
       class="tree-empty"
       @click="emit('select-file', '')"
     >
-      No files.
+      {{ $t('treeView.noFiles') }}
     </div>
     <div v-else class="tree-scroll" @click="onTreeScrollClick">
       <div
@@ -302,7 +302,7 @@
           v-if="row.node.type === 'directory'"
           type="button"
           class="tree-toggle"
-          :aria-label="isExpanded(row.node.path) ? 'Collapse directory' : 'Expand directory'"
+          :aria-label="isExpanded(row.node.path) ? $t('treeView.collapseDirectory') : $t('treeView.expandDirectory')"
           @click.stop="emit('toggle-dir', row.node.path)"
         >
           <Icon
@@ -325,7 +325,7 @@
           {{ statusLabel(displayStatus(row.node.path)?.code) }}
         </button>
       </div>
-      <div v-if="isLoading" class="tree-loading">Loading...</div>
+      <div v-if="isLoading" class="tree-loading">{{ $t('common.loading') }}</div>
       <div v-if="error" class="tree-error">{{ error }}</div>
     </div>
     <div class="tree-statusbar">
@@ -334,7 +334,7 @@
         <button
           type="button"
           class="tree-statusbar-btn"
-          aria-label="Reload file tree"
+          :aria-label="$t('treeView.reloadFileTree')"
           @click="emit('reload')"
         >
           <Icon icon="lucide:refresh-cw" :width="13" :height="13" />
@@ -346,7 +346,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@iconify/vue';
+
 import type { BranchEntry } from '../composables/useFileTree';
 import Dropdown from './Dropdown.vue';
 import DropdownItem from './Dropdown/Item.vue';
@@ -402,6 +404,8 @@ type BranchGroup = {
   entries: BranchEntry[];
 };
 
+const { t } = useI18n();
+
 const props = defineProps<{
   rootNodes: TreeNode[];
   expandedPaths: string[];
@@ -433,17 +437,19 @@ const pushMenuOpen = ref(false);
 const pullMenuOpen = ref(false);
 const expanded = computed(() => new Set(props.expandedPaths));
 const branchIcon = computed(() => (props.branchInfo ? 'lucide:git-branch' : 'lucide:folder'));
-const branchName = computed(() => props.branchInfo?.branch ?? props.directoryName ?? 'no git');
+const branchName = computed(() => props.branchInfo?.branch ?? props.directoryName ?? t('treeView.noGit'));
 
 const branchTitle = computed(() => {
   const info = props.branchInfo;
   if (!info) {
-    if (props.directoryName) return `Directory: ${props.directoryName}`;
-    return 'Git status unavailable';
+    if (props.directoryName) return t('treeView.branch.directory', { name: props.directoryName });
+    return t('treeView.branch.gitUnavailable');
   }
-  const head = info.headShort ? ` (${info.headShort})` : '';
-  const tracking = info.upstream ? ` tracking ${info.upstream}` : '';
-  return `${info.branch}${head}${tracking}`;
+  const head = info.headShort ? t('treeView.branch.headPrefix', { short: info.headShort }) : '';
+  if (info.upstream) {
+    return t('treeView.branch.tracking', { branch: info.branch, head, upstream: info.upstream });
+  }
+  return t('treeView.branch.currentOnly', { branch: info.branch, head });
 });
 
 const filteredLocalBranches = computed(() => {
@@ -465,7 +471,7 @@ const filteredRemoteBranchGroups = computed<BranchGroup[]>(() => {
   });
   return Array.from(groups, ([key, entries]) => ({
     key,
-    label: `Remote: ${key}`,
+    label: t('treeView.remote', { name: key }),
     entries: entries.slice(0, 5),
   }));
 });
@@ -491,9 +497,9 @@ const diffStatsTitle = computed(() => {
   const stats = activeDiffStats.value;
   if (!stats) return '';
   const parts: string[] = [];
-  if (stats.additions > 0) parts.push(`+${stats.additions} insertions`);
-  if (stats.deletions > 0) parts.push(`−${stats.deletions} deletions`);
-  return `${parts.join(', ')} (click to open diff)`;
+  if (stats.additions > 0) parts.push(t('treeView.diffStats.insertions', { count: stats.additions }));
+  if (stats.deletions > 0) parts.push(t('treeView.diffStats.deletions', { count: stats.deletions }));
+  return `${parts.join(', ')} (${t('treeView.diffStats.clickToOpen')})`;
 });
 
 function setViewMode(mode: TreeViewMode) {
@@ -758,10 +764,10 @@ function isBranchSwitchDisabled(entry: BranchEntry) {
 }
 
 function branchDisabledReason(entry: BranchEntry) {
-  if (entry.isCurrent) return 'Already on this branch';
-  if (entry.isWorktree) return 'Branch is already used by another worktree';
+  if (entry.isCurrent) return t('treeView.disabledReason.alreadyOnBranch');
+  if (entry.isWorktree) return t('treeView.disabledReason.worktreeInUse');
   if (!entry.isLocal && entry.hasLocalCounterpart) {
-    return 'A local branch with the same name already exists';
+    return t('treeView.disabledReason.localExists');
   }
   return '';
 }
@@ -792,7 +798,7 @@ function onBranchSelect(value: unknown) {
 
 function onBranchFork(entry: BranchEntry) {
   if (typeof window === 'undefined') return;
-  const promptValue = window.prompt(`Create new branch from "${entry.refnameShort}"`);
+  const promptValue = window.prompt(t('treeView.confirm.createBranchFrom', { ref: entry.refnameShort }));
   const nextName = promptValue?.trim() ?? '';
   if (!nextName) return;
   branchMenuOpen.value = false;
@@ -805,7 +811,7 @@ function onBranchMerge(entry: BranchEntry) {
   if (!canMergeBranch(entry)) return;
   const target = branchMergeTarget(entry);
   if (typeof window !== 'undefined') {
-    const confirmed = window.confirm(`Merge "${target}" into current branch?`);
+    const confirmed = window.confirm(t('treeView.confirm.mergeIntoCurrent', { branch: target }));
     if (!confirmed) return;
   }
   branchMenuOpen.value = false;
@@ -815,7 +821,7 @@ function onBranchMerge(entry: BranchEntry) {
 function onBranchDelete(entry: BranchEntry) {
   if (!canDeleteLocalBranch(entry)) return;
   if (typeof window !== 'undefined') {
-    const confirmed = window.confirm(`Delete local branch "${entry.displayName}"?`);
+    const confirmed = window.confirm(t('treeView.confirm.deleteBranch', { name: entry.displayName }));
     if (!confirmed) return;
   }
   branchMenuOpen.value = false;
@@ -830,7 +836,7 @@ function onRemoteFetch(remote: string) {
 function onBranchCommandSelect(value: unknown) {
   if (typeof value !== 'string') return;
   if (typeof window !== 'undefined') {
-    const confirmed = window.confirm(`Run "${value}"?`);
+    const confirmed = window.confirm(t('treeView.confirm.runCommand', { command: value }));
     if (!confirmed) return;
   }
   void props.runShellCommand?.(value);

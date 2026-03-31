@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, provide, watch, onBeforeUnmount, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import CodeContent from './CodeContent.vue';
 import { FLOATING_WINDOW_KEY, type FloatingWindowAPI } from '../composables/useFloatingWindow';
 import type { FloatingWindowEntry, useFloatingWindows } from '../composables/useFloatingWindows';
@@ -7,6 +8,8 @@ import { useAutoScroller, type ScrollMode } from '../composables/useAutoScroller
 import { useContentSearch } from '../composables/useContentSearch';
 import { useSettings } from '../composables/useSettings';
 import { Icon } from '@iconify/vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   entry: FloatingWindowEntry;
@@ -34,7 +37,7 @@ const search = useContentSearch(bodyEl);
 
 const searchResultLabel = computed(() => {
   if (search.query.value.length === 0) return '';
-  if (search.matchCount.value === 0 || search.currentIndex.value < 0) return 'No results';
+  if (search.matchCount.value === 0 || search.currentIndex.value < 0) return t('floatingWindow.noResults');
   return `${search.currentIndex.value + 1}/${search.matchCount.value}`;
 });
 
@@ -462,12 +465,12 @@ function onResizeEnd(e: PointerEvent) {
     :data-floating-key="entry.key"
   >
     <div class="floating-window-titlebar" @pointerdown="onDragStart">
-      <span class="title">{{ entry.title || 'Tool' }}</span>
+      <span class="title">{{ entry.title || t('floatingWindow.tool') }}</span>
       <div class="window-actions">
         <button
           v-if="showMinimizeButtons"
           class="minimize-btn"
-          aria-label="Minimize window"
+          :aria-label="t('floatingWindow.minimizeWindow')"
           @click.stop="onMinimize"
         >
           —
@@ -475,7 +478,7 @@ function onResizeEnd(e: PointerEvent) {
         <button
           v-if="canCloseWindow"
           class="close-btn"
-          aria-label="Close window"
+          :aria-label="t('floatingWindow.closeWindow')"
           @click.stop="onClose"
         >
           ×
@@ -523,25 +526,25 @@ function onResizeEnd(e: PointerEvent) {
           class="fw-search-input"
           type="text"
           spellcheck="false"
-          placeholder="Search"
+          :placeholder="t('floatingWindow.search')"
           @keydown="onSearchKeydown"
         />
         <span class="fw-search-count">{{ searchResultLabel }}</span>
         <button
           class="fw-search-btn"
           type="button"
-          aria-label="Previous match"
+          :aria-label="t('floatingWindow.previousMatch')"
           @click="search.prev"
         >
           ▲
         </button>
-        <button class="fw-search-btn" type="button" aria-label="Next match" @click="search.next">
+        <button class="fw-search-btn" type="button" :aria-label="t('floatingWindow.nextMatch')" @click="search.next">
           ▼
         </button>
         <button
           class="fw-search-btn"
           type="button"
-          aria-label="Close search"
+          :aria-label="t('floatingWindow.closeSearch')"
           @click="
             search.close();
             bodyEl?.focus();

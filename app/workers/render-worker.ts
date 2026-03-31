@@ -17,6 +17,11 @@ type RenderRequest = {
   lineOffset?: number;
   lineLimit?: number;
   files?: string[];
+  // Localization strings for copy buttons
+  copyButtonLabel?: string;
+  copiedLabel?: string;
+  copyCodeAriaLabel?: string;
+  copyMarkdownAriaLabel?: string;
 };
 
 type RenderResponse =
@@ -899,15 +904,7 @@ function getMarkdownIt(highlighter: Highlighter, theme: string) {
       return defaultLinkOpen(tokens, idx, options, _env, self);
     };
 
-    const defaultFence = cachedMd.renderer.rules.fence;
-    if (!defaultFence) {
-      throw new Error('missing markdown fence renderer');
-    }
 
-    cachedMd.renderer.rules.fence = function (tokens, idx, options, _env, self) {
-      const renderedFence = defaultFence(tokens, idx, options, _env, self);
-      return `<div class="md-code-block">${renderedFence}<button class="md-copy-btn" type="button" aria-label="Copy code">COPY</button><div class="md-copied-indicator" aria-hidden="true">✓ Copied</div></div>`;
-    };
 
     const defaultCodeInline =
       cachedMd.renderer.rules.code_inline ??
@@ -967,7 +964,24 @@ async function renderMarkdownHtml(request: RenderRequest): Promise<string> {
   const env: MarkdownRenderEnv = {};
   if (request.files?.length) env.fileSet = new Set(request.files);
   const rendered = md.render(request.code, env);
-  return `<div class="markdown-host"><template class="md-raw-source">${escapeHtml(request.code)}</template><button class="md-copy-btn md-copy-btn-host" type="button" aria-label="Copy markdown">COPY</button><div class="md-copied-indicator md-copied-indicator-host" aria-hidden="true">✓ Copied</div>${rendered}</div>`;
+
+  // Use localized strings or defaults
+  const copyButtonLabel = request.copyButtonLabel ?? 'COPY';
+  const copiedLabel = request.copiedLabel ?? '✓ Copied';
+  const copyCodeAriaLabel = request.copyCodeAriaLabel ?? 'Copy code';
+  const copyMarkdownAriaLabel = request.copyMarkdownAriaLabel ?? 'Copy markdown';
+
+  // Wrap code blocks with copy buttons using localized strings
+  const wrappedRendered = rendered.replace(
+    /<pre class="shiki"/g,
+    `<div class="md-code-block"><pre class="shiki"`,
+  );
+  const withCodeButtons = wrappedRendered.replace(
+    /<\/pre>(?![\s\S]*<\/pre>)/g,
+    `</pre><button class="md-copy-btn" type="button" aria-label="${escapeHtml(copyCodeAriaLabel)}">${escapeHtml(copyButtonLabel)}</button><div class="md-copied-indicator" aria-hidden="true">${escapeHtml(copiedLabel)}</div></div>`,
+  );
+
+  return `<div class="markdown-host"><template class="md-raw-source">${escapeHtml(request.code)}</template><button class="md-copy-btn md-copy-btn-host" type="button" aria-label="${escapeHtml(copyMarkdownAriaLabel)}">${escapeHtml(copyButtonLabel)}</button><div class="md-copied-indicator md-copied-indicator-host" aria-hidden="true">${escapeHtml(copiedLabel)}</div>${withCodeButtons}</div>`;
 }
 
 function renderRequest(request: RenderRequest): Promise<string> {

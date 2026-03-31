@@ -880,7 +880,7 @@ function detachPort(port: MessagePort) {
   cleanupIfUnused(state);
 }
 
-function createConnectionState(baseUrl: string, authorization?: string) {
+function createConnectionState(baseUrl: string, authorization?: string, errorMessages?: { emptyBaseUrl?: string; authenticationFailed?: string; streamClosed?: string; httpError?: (status: number) => string }) {
   const key = toKey(baseUrl, authorization);
   let state: ConnectionState;
   state = {
@@ -918,15 +918,15 @@ function createConnectionState(baseUrl: string, authorization?: string) {
       },
     }),
   };
-  state.client.connect({ baseUrl, authorization });
+  state.client.connect({ baseUrl, authorization, errorMessages });
   return state;
 }
 
-function attachPort(port: MessagePort, baseUrl: string, authorization?: string) {
+function attachPort(port: MessagePort, baseUrl: string, authorization?: string, errorMessages?: { emptyBaseUrl?: string; authenticationFailed?: string; streamClosed?: string; httpError?: (status: number) => string }) {
   detachPort(port);
   const key = toKey(baseUrl, authorization);
   const existing = connections.get(key);
-  const state = existing ?? createConnectionState(baseUrl, authorization);
+  const state = existing ?? createConnectionState(baseUrl, authorization, errorMessages);
   if (!existing) {
     connections.set(key, state);
   }
@@ -952,10 +952,10 @@ function handleMessage(port: MessagePort, event: MessageEvent<TabToWorkerMessage
 
   if (message.type === 'connect') {
     if (!message.baseUrl) {
-      send(port, { type: 'connection.error', message: 'SSE base URL is empty.' });
+      send(port, { type: 'connection.error', message: message.errorMessages?.emptyBaseUrl ?? 'SSE base URL is empty.' });
       return;
     }
-    attachPort(port, message.baseUrl, message.authorization);
+    attachPort(port, message.baseUrl, message.authorization, message.errorMessages);
     return;
   }
 

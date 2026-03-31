@@ -5,24 +5,30 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import MessageViewer from './MessageViewer.vue';
+
+const { t } = useI18n();
 
 defineProps<{
   theme: string;
 }>();
 
 const origin = window.location.origin;
+const configPath = '`.config/opencode/opencode.json`';
 
-const markdown = `\
-# How To Use \`OpenCode Visualizer\`
+const markdown = computed(() => {
+  return `\
+# ${t('welcome.title')}
 
-Start the OpenCode server with CORS enabled:
+${t('welcome.startServer')}
 
 \`\`\`bash
 opencode serve --cors ${origin}
 \`\`\`
 
-or add this to your \`.config/opencode/opencode.json\`:
+${t('welcome.addConfig', { configPath })}
 
 \`\`\`json
 {
@@ -32,11 +38,12 @@ or add this to your \`.config/opencode/opencode.json\`:
   }
 }
 \`\`\`
-and then:
+${t('welcome.andThen')}
 \`\`\`bash
 opencode serve
 \`\`\`
 `;
+});
 </script>
 
 <style scoped>

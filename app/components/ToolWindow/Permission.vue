@@ -1,31 +1,31 @@
 <template>
   <div class="permission-window">
     <div class="permission-header">
-      <div class="permission-title">Permission request</div>
+      <div class="permission-title">{{ $t('toolWindow.permission.title') }}</div>
       <div class="permission-type">{{ request.permission }}</div>
     </div>
     <div class="permission-summary">
       <div class="permission-row">
-        <div class="permission-label">Session</div>
+        <div class="permission-label">{{ $t('toolWindow.permission.session') }}</div>
         <div class="permission-value">{{ request.sessionID }}</div>
       </div>
       <div v-if="request.tool" class="permission-row">
-        <div class="permission-label">Tool</div>
+        <div class="permission-label">{{ $t('toolWindow.permission.tool') }}</div>
         <div class="permission-value">
-          message {{ request.tool.messageID }}
+          {{ $t('toolWindow.permission.message') }} {{ request.tool.messageID }}
           <span class="divider">/</span>
-          call {{ request.tool.callID }}
+          {{ $t('toolWindow.permission.call') }} {{ request.tool.callID }}
         </div>
       </div>
       <div class="permission-row">
-        <div class="permission-label">Items</div>
+        <div class="permission-label">{{ $t('toolWindow.permission.items') }}</div>
         <div class="permission-value">
-          Patterns {{ request.patterns.length }}
+          {{ $t('toolWindow.permission.patternsTitle') }} {{ request.patterns.length }}
           <span class="divider">/</span>
-          Metadata {{ metadataEntries.length }}
+          {{ $t('toolWindow.permission.metadataTitle') }} {{ metadataEntries.length }}
           <span v-if="request.always.length > 0">
             <span class="divider">/</span>
-            Always {{ request.always.length }}
+            {{ $t('toolWindow.permission.alwaysAllow') }} {{ request.always.length }}
           </span>
         </div>
       </div>
@@ -33,16 +33,16 @@
 
     <div class="permission-body">
       <div class="permission-section">
-        <div class="section-title">Patterns ({{ request.patterns.length }})</div>
+        <div class="section-title">{{ $t('toolWindow.permission.patternsTitle') }} ({{ request.patterns.length }})</div>
         <ul class="pattern-list">
           <li v-for="pattern in request.patterns" :key="pattern">{{ pattern }}</li>
-          <li v-if="request.patterns.length === 0" class="empty">None</li>
+          <li v-if="request.patterns.length === 0" class="empty">{{ $t('toolWindow.permission.none') }}</li>
         </ul>
       </div>
 
       <div class="permission-section">
-        <div class="section-title">Metadata ({{ metadataEntries.length }})</div>
-        <div v-if="metadataEntries.length === 0" class="empty">None</div>
+        <div class="section-title">{{ $t('toolWindow.permission.metadataTitle') }} ({{ metadataEntries.length }})</div>
+        <div v-if="metadataEntries.length === 0" class="empty">{{ $t('toolWindow.permission.none') }}</div>
         <div v-for="entry in metadataEntries" :key="entry[0]" class="metadata-row">
           <div class="metadata-key">{{ entry[0] }}</div>
           <div class="metadata-value">{{ formatInlineValue(entry[1]) }}</div>
@@ -50,7 +50,7 @@
       </div>
 
       <div v-if="request.always.length > 0" class="permission-section">
-        <div class="section-title">Always allow ({{ request.always.length }})</div>
+        <div class="section-title">{{ $t('toolWindow.permission.alwaysAllow') }} ({{ request.always.length }})</div>
         <ul class="pattern-list">
           <li v-for="pattern in request.always" :key="pattern">{{ pattern }}</li>
         </ul>
@@ -66,7 +66,7 @@
         :disabled="isSubmitting"
         @click="emitReply('once')"
       >
-        Once
+        {{ $t('toolWindow.permission.once') }}
       </button>
       <button
         type="button"
@@ -74,7 +74,7 @@
         :disabled="isSubmitting"
         @click="emitReply('always')"
       >
-        Always
+        {{ $t('toolWindow.permission.always') }}
       </button>
       <button
         type="button"
@@ -82,7 +82,7 @@
         :disabled="isSubmitting"
         @click="emitReply('reject')"
       >
-        Reject
+        {{ $t('toolWindow.permission.reject') }}
       </button>
     </div>
   </div>
@@ -131,7 +131,7 @@ function formatInlineValue(value: unknown) {
 function trimToLength(text: string, maxLength: number) {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 3)}...`;
+  return normalized.slice(0, maxLength - 3) + '...';
 }
 
 function emitReply(reply: PermissionReply) {

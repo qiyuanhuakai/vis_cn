@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CodeContent from '../CodeContent.vue';
+import { useI18n } from 'vue-i18n';
 
 defineProps<{
   html: string;
@@ -8,13 +9,15 @@ defineProps<{
   url?: string;
   query?: string;
 }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
   <div v-if="status === 'running'" class="tool-placeholder">
-    <div v-if="url">URL: {{ url }}</div>
-    <div v-if="query">Query: {{ query }}</div>
-    <div v-if="!url && !query">{{ tool === 'webfetch' ? 'Fetching...' : 'Searching...' }}</div>
+    <div v-if="url">{{ t('toolWindow.web.urlLabel') }} {{ url }}</div>
+    <div v-if="query">{{ t('toolWindow.web.queryLabel') }} {{ query }}</div>
+    <div v-if="!url && !query">{{ tool === 'webfetch' ? t('toolWindow.web.fetching') : t('toolWindow.web.searching') }}</div>
   </div>
   <CodeContent v-else :html="html" variant="plain" />
 </template>

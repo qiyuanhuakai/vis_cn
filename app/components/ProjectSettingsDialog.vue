@@ -8,14 +8,14 @@
   >
     <div class="modal">
       <header class="modal-header">
-        <div class="modal-title">Project Settings</div>
+        <div class="modal-title">{{ $t('projectSettings.title') }}</div>
         <button type="button" class="modal-close-button" @click="dialogRef?.close()">
           <Icon icon="lucide:x" :width="14" :height="14" />
         </button>
       </header>
       <form class="modal-body" @submit.prevent="handleSubmit">
         <div class="field">
-          <label class="field-label">Name</label>
+          <label class="field-label">{{ $t('projectSettings.name') }}</label>
           <div class="name-row">
             <input v-model="form.name" type="text" class="field-input" :placeholder="defaultName" />
             <button
@@ -24,8 +24,8 @@
               :disabled="!packageJsonName"
               :title="
                 packageJsonName
-                  ? `Sync from package.json: ${packageJsonName}`
-                  : 'Sync from package.json'
+                  ? `${$t('projectSettings.syncFromPackage')}: ${packageJsonName}`
+                  : $t('projectSettings.syncFromPackage')
               "
               @click="form.name = packageJsonName!"
             >
@@ -35,7 +35,7 @@
         </div>
 
         <div class="field">
-          <label class="field-label">Icon</label>
+          <label class="field-label">{{ $t('projectSettings.icon') }}</label>
           <div class="icon-row">
             <div
               class="icon-preview"
@@ -45,7 +45,7 @@
               @dragleave="dragOver = false"
               @click="form.iconUrl ? clearIcon() : iconInput?.click()"
             >
-              <img v-if="form.iconUrl" :src="form.iconUrl" alt="icon" class="icon-image" />
+              <img v-if="form.iconUrl" :src="form.iconUrl" :alt="$t('projectSettings.iconAlt')" class="icon-image" />
               <span v-else class="icon-letter" :style="avatarStyle">{{ avatarLetter }}</span>
               <div v-if="form.iconUrl" class="icon-overlay delete">
                 <Icon icon="lucide:trash-2" :width="20" :height="20" />
@@ -62,14 +62,14 @@
               @change="handleFileInput"
             />
             <div class="icon-hint">
-              <span>Click or drag an image</span>
-              <span>Recommended: 128x128px</span>
+              <span>{{ $t('projectSettings.dropHint') }}</span>
+              <span>{{ $t('projectSettings.sizeHint') }}</span>
             </div>
           </div>
         </div>
 
         <div v-if="!form.iconUrl" class="field">
-          <label class="field-label">Color</label>
+          <label class="field-label">{{ $t('projectSettings.color') }}</label>
           <div class="color-row">
             <button
               v-for="c in COLOR_KEYS"
@@ -87,20 +87,20 @@
         </div>
 
         <div class="field">
-          <label class="field-label">Workspace startup script</label>
+          <label class="field-label">{{ $t('projectSettings.startupScript') }}</label>
           <textarea
             v-model="form.startup"
             class="field-textarea"
-            placeholder="e.g. bun install"
+            :placeholder="$t('projectSettings.startupPlaceholder')"
             rows="2"
             spellcheck="false"
           />
-          <span class="field-description">Runs after creating a new workspace (worktree).</span>
+          <span class="field-description">{{ $t('projectSettings.startupScriptHint') }}</span>
         </div>
 
         <div class="modal-actions">
           <button type="submit" class="action-button save" :disabled="saving">
-            {{ saving ? 'Saving...' : 'Save' }}
+            {{ saving ? $t('projectSettings.saving') : $t('projectSettings.save') }}
           </button>
         </div>
       </form>

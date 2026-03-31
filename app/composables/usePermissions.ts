@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import PermissionContent from '../components/ToolWindow/Permission.vue';
 import * as opencodeApi from '../utils/opencode';
 import type { useFloatingWindows } from './useFloatingWindows';
@@ -28,6 +29,7 @@ export function usePermissions(options: {
   activeDirectory: Ref<string>;
   ensureConnectionReady: (action: string) => boolean;
 }) {
+  const { t } = useI18n();
   const permissionSendingById = ref<Record<string, boolean>>({});
   const permissionErrorById = ref<Record<string, string>>({});
 
@@ -147,7 +149,7 @@ export function usePermissions(options: {
       resizable: false,
       scroll: 'manual',
       color: '#f59e0b',
-      title: `Permission: ${request.permission || 'request'}`,
+      title: t('app.windowTitles.permission', { title: request.permission || 'request' }),
       width: PERMISSION_WINDOW_WIDTH,
       height: PERMISSION_WINDOW_HEIGHT,
       expiry: Infinity,
@@ -186,7 +188,7 @@ export function usePermissions(options: {
   }
 
   async function sendPermissionReply(requestId: string, reply: PermissionReply) {
-    if (!options.ensureConnectionReady('Permission reply')) return;
+    if (!options.ensureConnectionReady(t('app.actions.permissionReply'))) return;
     const directory = options.activeDirectory.value.trim();
     await opencodeApi.replyPermission(requestId, {
       directory: directory || undefined,
@@ -195,7 +197,7 @@ export function usePermissions(options: {
   }
 
   async function handlePermissionReply(payload: { requestId: string; reply: PermissionReply }) {
-    if (!options.ensureConnectionReady('Permission reply')) return;
+    if (!options.ensureConnectionReady(t('app.actions.permissionReply'))) return;
     const { requestId, reply } = payload;
     if (isPermissionSubmitting(requestId)) return;
     clearPermissionError(requestId);

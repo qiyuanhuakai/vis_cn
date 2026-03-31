@@ -26,16 +26,16 @@
         >
           <div class="history-meta">
             <span class="history-index">🤔</span>
-            <span class="history-reasoning-badge">THOUGHT</span>
+            <span class="history-reasoning-badge">{{ t('threadHistory.thinking') }}</span>
             <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
           </div>
         </div>
         <div v-else-if="entry.kind === 'question'" class="history-item history-item-question">
           <div class="history-meta history-meta-question">
             <span class="history-index">❓</span>
-            <span class="history-question-badge">QUESTION</span>
+            <span class="history-question-badge">{{ t('threadHistory.question') }}</span>
             <span class="history-question-status" :class="`is-${entry.status}`">{{
-              entry.status
+              translatedQuestionStatus(entry.status)
             }}</span>
             <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
           </div>
@@ -75,7 +75,7 @@
               toolBadgeLabel(entry.part.tool)
             }}</span>
             <span class="history-tool-status" :class="`is-${toolStatusLabel(entry.part)}`">{{
-              toolStatusLabel(entry.part)
+              translatedToolStatus(toolStatusLabel(entry.part))
             }}</span>
             <span class="history-time">{{ formatMessageTime(entry.time) }}</span>
           </div>
@@ -87,9 +87,12 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import MessageViewer from './MessageViewer.vue';
 import { useFloatingWindow } from '../composables/useFloatingWindow';
 import type { QuestionInfo, ReasoningPart, ToolPart } from '../types/sse';
+
+const { t } = useI18n();
 
 type QuestionHistoryEntry = {
   key: string;
@@ -155,15 +158,15 @@ function getCustomAnswer(entry: QuestionHistoryEntry, questionIndex: number): st
 function toolBadgeLabel(tool: string): string {
   switch (tool) {
     case 'bash':
-      return 'SHELL';
+      return t('toolTitles.shell');
     case 'write':
-      return 'WRITE';
+      return t('toolTitles.write');
     case 'edit':
-      return 'EDIT';
+      return t('toolTitles.edit');
     case 'multiedit':
-      return 'EDIT';
+      return t('toolTitles.edit');
     case 'apply_patch':
-      return 'PATCH';
+      return t('toolTitles.patch');
     default:
       return tool.toUpperCase();
   }
@@ -217,6 +220,14 @@ function toolSummary(part: ToolPart): string {
 
 function toolStatusLabel(part: ToolPart): string {
   return part.state.status;
+}
+
+function translatedQuestionStatus(status: string): string {
+  return t(`questionStatus.${status}`, status);
+}
+
+function translatedToolStatus(status: string): string {
+  return t(`toolStatus.${status}`, status);
 }
 
 function toolHeaderColor(tool: string): string {

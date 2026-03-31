@@ -182,7 +182,7 @@
             :key="`dock-${entry.key}`"
             type="button"
             class="window-dock-chip"
-            :title="`Restore ${entry.title || 'window'}`"
+            :title="$t('app.dock.restoreTitle', { title: entry.title || $t('app.dock.restoreFallbackWindow') })"
             @click="restoreFloatingWindow(entry.key)"
           >
             <span class="window-dock-chip-title">{{ entry.title || entry.key }}</span>
@@ -213,18 +213,18 @@
               </svg>
             </div>
             <div class="text-text-100 rounded-xl bg-surface-900 py-2 px-4">
-              <span class="text-accent-400">V</span>is - OpenCode Visualizer
+              <span class="text-accent-400">V</span>{{ $t('app.brand.title').slice(1) }}
             </div>
           </div>
         </div>
         <div v-if="uiInitState === 'login'" class="app-login-form">
-          <p class="app-loading-title">Connect to OpenCode Server</p>
+          <p class="app-loading-title">{{ t('app.login.title') }}</p>
           <div class="app-login-fields">
             <input
               v-model="loginUsername"
               type="text"
               class="app-login-input"
-              placeholder="Username"
+              :placeholder="t('app.login.username')"
               name="username"
               :disabled="!loginRequiresAuth"
               @keydown.enter="handleLogin"
@@ -233,19 +233,19 @@
               v-model="loginPassword"
               type="password"
               class="app-login-input"
-              placeholder="Password"
+              :placeholder="t('app.login.password')"
               :disabled="!loginRequiresAuth"
               @keydown.enter="handleLogin"
             />
             <label class="app-login-checkbox">
               <input v-model="loginRequiresAuth" type="checkbox" />
-              The server requires authentication
+              {{ t('app.login.authRequired') }}
             </label>
             <input
               v-model="loginUrl"
               type="text"
               class="app-login-input"
-              placeholder="http://localhost:4096"
+              :placeholder="$t('app.login.url')"
               name="url"
               @keydown.enter="handleLogin"
             />
@@ -254,14 +254,14 @@
             {{ initErrorMessage }}
           </p>
           <button type="button" class="app-loading-retry bg-indigo-500!" @click="handleLogin">
-            Connect
+            {{ t('app.login.connect') }}
           </button>
 
           <Welcome :theme="shikiTheme" class="mt-8" />
         </div>
         <div v-else>
           <div class="app-loading-spinner" aria-hidden="true"></div>
-          <p class="app-loading-title">Loading session data...</p>
+          <p class="app-loading-title">{{ t('app.loading') }}</p>
           <p class="app-loading-message">
             {{ uiInitState === 'error' ? initErrorMessage : initLoadingMessage }}
           </p>
@@ -272,7 +272,7 @@
               class="app-loading-retry"
               @click="startInitialization"
             >
-              Retry
+              {{ t('app.login.retry') }}
             </button>
             <button
               v-if="uiInitState === 'loading' && connectionState === 'connecting'"
@@ -280,7 +280,7 @@
               class="app-loading-retry app-loading-abort"
               @click="handleAbortInit"
             >
-              Abort
+              {{ t('app.login.abort') }}
             </button>
           </div>
         </div>
@@ -318,6 +318,7 @@ import {
   watch,
   watchEffect,
 } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { bundledThemes } from 'shiki/bundle/web';
 import { Terminal } from '@xterm/xterm';
 import InputPanel from './components/InputPanel.vue';
@@ -368,7 +369,7 @@ import { useReasoningWindows } from './composables/useReasoningWindows';
 import { useServerState } from './composables/useServerState';
 import { useSessionSelection } from './composables/useSessionSelection';
 import { useSubagentWindows } from './composables/useSubagentWindows';
-import { renderWorkerHtml } from './utils/workerRenderer';
+import { renderWorkerHtml, type RenderRequest } from './utils/workerRenderer';
 import type { MessagePart, ReasoningPart, ToolPart } from './types/sse';
 import { resolveProjectColorHex } from './utils/stateBuilder';
 import {
@@ -389,6 +390,7 @@ import {
   storageSetJSON,
 } from './utils/storageKeys';
 
+const { t } = useI18n();
 const credentials = useCredentials();
 const { suppressAutoWindows, showMinimizeButtons, pinnedSessionsLimit } = useSettings();
 const FOLLOW_THRESHOLD_PX = 24;
@@ -453,13 +455,13 @@ const FILE_SNAPSHOT_SCRIPT = [
   'fi',
 ].join('\n');
 type WorktreeSnapshotMode = 'staged' | 'changes' | 'all';
-function buildWorktreeSnapshotScript(mode: WorktreeSnapshotMode): string {
+function buildWorktreeSnapshotScript(mode: WorktreeSnapshotMode, translate: (key: string) => string): string {
   const title =
     mode === 'staged'
-      ? 'Staged changes'
+      ? translate('app.git.stagedChanges')
       : mode === 'changes'
-        ? 'Unstaged changes'
-        : 'Working tree (staged + changes)';
+        ? translate('app.git.unstagedChanges')
+        : translate('app.git.workingTree');
   // Filter logic: which files to include based on mode
   // x = index status (1st column), y = worktree status (2nd column)
   let filterLines: string[];
@@ -867,21 +869,22 @@ const providersFetchCount = ref(0);
 const agentsLoading = ref(false);
 const commandsLoading = ref(false);
 const serverState = useServerState();
-const openCodeApi = useOpenCodeApi(serverState.projects);
+const openCodeApi = useOpenCodeApi(serverState.projects, t);
 const bootstrapReady = serverState.bootstrapped;
 const sessionSelection = useSessionSelection(
   computed(() => serverState.projects),
   async (projectId) => {
     const directory = serverState.projects[projectId]?.worktree?.trim();
     if (!directory) {
-      throw new Error('Session create failed: project worktree is empty.');
+      throw new Error(t('errors.sessionCreateEmptyWorktree'));
     }
     const created = await openCodeApi.createSession(directory);
     if (!created?.id) {
-      throw new Error('Session create failed: invalid response.');
+      throw new Error(t('errors.sessionCreateInvalidResponse'));
     }
     return { id: created.id, projectId: projectId };
   },
+  t,
 );
 const {
   selectedProjectId,
@@ -990,6 +993,7 @@ const reasoning = useReasoningWindows({
     return modelOptions.value.find((m) => m.id === key)?.displayName;
   },
   suppressAutoWindows,
+  t,
 });
 const { updateReasoningExpiry } = reasoning;
 
@@ -1025,12 +1029,12 @@ const worktreeError = ref('');
 const sessionError = ref('');
 const messageInput = ref('');
 const attachments = ref<Attachment[]>([]);
-const sendStatus = ref('Ready');
+const sendStatus = ref(t('app.status.ready'));
 const isSending = ref(false);
 const isAborting = ref(false);
 const isBootstrapping = ref(false);
 const uiInitState = ref<'loading' | 'ready' | 'error' | 'login'>('loading');
-const initLoadingMessage = ref('Connecting to server...');
+const initLoadingMessage = ref(t('app.connection.connecting'));
 const initErrorMessage = ref('');
 const connectionState = ref<'connecting' | 'bootstrapping' | 'ready' | 'reconnecting' | 'error'>(
   'connecting',
@@ -1050,14 +1054,14 @@ const retryStatus = ref<{
 
 const statusText = computed(() => {
   if (connectionState.value === 'reconnecting') {
-    return reconnectingMessage.value || 'Reconnecting...';
+    return reconnectingMessage.value || t('app.connection.reconnecting');
   }
   if (retryStatus.value) {
     const timeStr = formatRetryTime(retryStatus.value.next);
-    return `${retryStatus.value.message} | Next: ${timeStr}`;
+    return `${retryStatus.value.message} | ${t('app.status.next')}: ${timeStr}`;
   }
   if (openCodeApi.pending.value) {
-    return 'Synchronizing with SSE updates...';
+    return t('app.status.synchronizing');
   }
   return projectError.value || worktreeError.value || sessionError.value || sendStatus.value;
 });
@@ -1404,7 +1408,7 @@ const commandOptions = computed(() => {
   if (!hasShell) {
     list.push({
       name: 'shell',
-      description: 'Open a local shell session.',
+      description: t('app.descriptions.openLocalShell'),
       source: 'local',
     });
   }
@@ -1412,7 +1416,7 @@ const commandOptions = computed(() => {
   if (!hasDebug) {
     list.push({
       name: 'debug',
-      description: 'Debug utilities. Use /debug help for subcommands.',
+      description: t('app.menu.debugUtilities'),
       source: 'local',
     });
   }
@@ -1460,7 +1464,7 @@ function resolveWorktreeRelativePath(path?: string) {
 function requireSelectedWorktree(_context: 'send') {
   const directory = getSelectedWorktreeDirectory();
   if (directory) return directory;
-  const message = 'No worktree selected.';
+  const message = t('app.error.noWorktreeSelected');
   sendStatus.value = message;
   return '';
 }
@@ -1468,11 +1472,11 @@ function requireSelectedWorktree(_context: 'send') {
 function ensureConnectionReady(action: string) {
   if (connectionState.value === 'ready' && uiInitState.value === 'ready') return true;
   if (connectionState.value === 'reconnecting') {
-    sendStatus.value = `Reconnecting... ${action} is temporarily disabled.`;
+    sendStatus.value = `${t('app.connection.reconnecting')} ${t('app.error.actionDisabled', { action })}`;
   } else if (uiInitState.value === 'loading') {
-    sendStatus.value = `Still loading. ${action} is temporarily disabled.`;
+    sendStatus.value = `${t('app.error.stillLoading')} ${t('app.error.actionDisabled', { action })}`;
   } else {
-    sendStatus.value = `Not connected. ${action} is unavailable.`;
+    sendStatus.value = `${t('app.error.notConnected')} ${t('app.error.unavailable', { action })}`;
   }
   return false;
 }
@@ -2291,11 +2295,11 @@ function generateAttachmentId() {
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('File read failed.'));
+    reader.onerror = () => reject(new Error(t('app.error.fileReadFailed')));
     reader.onload = () => {
       const result = reader.result;
       if (typeof result === 'string') resolve(result);
-      else reject(new Error('File read failed.'));
+      else reject(new Error(t('app.error.fileReadFailed')));
     };
     reader.readAsDataURL(file);
   });
@@ -2304,7 +2308,7 @@ function readFileAsDataUrl(file: File) {
 async function handleAddAttachments(files: File[]) {
   const accepted = files.filter((file) => ATTACHMENT_MIME_ALLOWLIST.has(file.type));
   if (accepted.length === 0) {
-    sendStatus.value = 'Unsupported attachment type.';
+    sendStatus.value = t('app.error.unsupportedAttachment');
     return;
   }
   try {
@@ -2319,7 +2323,7 @@ async function handleAddAttachments(files: File[]) {
     attachments.value = [...attachments.value, ...next];
     persistComposerDraftForCurrentContext();
   } catch (error) {
-    sendStatus.value = `Attachment failed: ${toErrorMessage(error)}`;
+    sendStatus.value = t('app.error.attachmentFailed', { message: toErrorMessage(error) });
   }
 }
 
@@ -2493,10 +2497,10 @@ async function createSessionInDirectory(directory: string) {
 }
 
 async function createWorktreeFromWorktree(worktree: string) {
-  if (!ensureConnectionReady('Creating worktree')) return;
+  if (!ensureConnectionReady(t('app.actions.creatingWorktree'))) return;
   worktreeError.value = '';
   if (!worktree) {
-    worktreeError.value = 'Worktree base directory not set.';
+    worktreeError.value = t('app.error.worktreeBaseNotSet');
     return;
   }
   try {
@@ -2508,16 +2512,16 @@ async function createWorktreeFromWorktree(worktree: string) {
       await createSessionInDirectory(data.directory);
     }
   } catch (error) {
-    worktreeError.value = `Worktree create failed: ${toErrorMessage(error)}`;
+    worktreeError.value = t('app.error.worktreeCreateFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function deleteWorktree(directory: string) {
-  if (!ensureConnectionReady('Deleting worktree')) return;
+  if (!ensureConnectionReady(t('app.actions.deletingWorktree'))) return;
   worktreeError.value = '';
   if (!directory) return;
   if (!projectDirectory.value) {
-    worktreeError.value = 'Worktree base directory not set.';
+    worktreeError.value = t('app.error.worktreeBaseNotSet');
     return;
   }
   const baseDir = projectDirectory.value.replace(/\/+$/, '');
@@ -2545,7 +2549,7 @@ async function deleteWorktree(directory: string) {
       }
     }
   } catch (error) {
-    worktreeError.value = `Worktree delete failed: ${toErrorMessage(error)}`;
+    worktreeError.value = t('app.error.worktreeDeleteFailed', { message: toErrorMessage(error) });
   }
 }
 
@@ -2554,12 +2558,13 @@ function openProjectPicker() {
 }
 
 async function createNewSession(): Promise<SessionInfo | undefined> {
-  if (!ensureConnectionReady('Creating session')) return undefined;
+  if (!ensureConnectionReady(t('app.actions.creatingSession'))) return undefined;
   sessionError.value = '';
   try {
     const directory = activeDirectory.value.trim();
     if (!directory) {
-      throw new Error('Session create failed: active directory is empty.');
+      throw new Error(t('errors.sessionCreateEmptyDirectory'));
+
     }
     const data = await openCodeApi.createSession(directory);
     if (data && typeof data.id === 'string') {
@@ -2571,7 +2576,7 @@ async function createNewSession(): Promise<SessionInfo | undefined> {
     }
     return data;
   } catch (error) {
-    sessionError.value = `Session create failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionCreateFailed', { message: toErrorMessage(error) });
     return undefined;
   }
 }
@@ -2616,7 +2621,7 @@ function handleNotificationSessionSelect() {
 }
 
 async function deleteSession(sessionId: string, hints?: { projectId?: string; directory?: string }) {
-  if (!ensureConnectionReady('Deleting session')) return;
+  if (!ensureConnectionReady(t('app.actions.deletingSession'))) return;
   sessionError.value = '';
   if (!sessionId) return;
   try {
@@ -2632,12 +2637,12 @@ async function deleteSession(sessionId: string, hints?: { projectId?: string; di
       directory,
     });
   } catch (error) {
-    sessionError.value = `Session delete failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionDeleteFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function archiveSession(sessionId: string, hints?: { projectId?: string; directory?: string }) {
-  if (!ensureConnectionReady('Archiving session')) return;
+  if (!ensureConnectionReady(t('app.actions.archivingSession'))) return;
   sessionError.value = '';
   if (!sessionId) return;
   try {
@@ -2653,12 +2658,12 @@ async function archiveSession(sessionId: string, hints?: { projectId?: string; d
       directory,
     });
   } catch (error) {
-    sessionError.value = `Session archive failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionArchiveFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function unarchiveSession(sessionId: string, hints?: { projectId?: string; directory?: string }) {
-  if (!ensureConnectionReady('Unarchiving session')) return;
+  if (!ensureConnectionReady(t('app.actions.unarchivingSession'))) return;
   sessionError.value = '';
   if (!sessionId) return;
   try {
@@ -2674,12 +2679,12 @@ async function unarchiveSession(sessionId: string, hints?: { projectId?: string;
       directory,
     });
   } catch (error) {
-    sessionError.value = `Session unarchive failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionUnarchiveFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function pinSession(sessionId: string, hints?: { projectId?: string; directory?: string }) {
-  if (!ensureConnectionReady('Pinning session')) return;
+  if (!ensureConnectionReady(t('app.actions.pinningSession'))) return;
   sessionError.value = '';
   if (!sessionId) return;
   try {
@@ -2695,7 +2700,7 @@ async function pinSession(sessionId: string, hints?: { projectId?: string; direc
       directory,
     });
   } catch (error) {
-    sessionError.value = `Session pin failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionPinFailed', { message: toErrorMessage(error) });
   }
 }
 
@@ -2703,7 +2708,7 @@ async function unpinSession(
   sessionId: string,
   hints?: { projectId?: string; directory?: string },
 ) {
-  if (!ensureConnectionReady('Unpinning session')) return;
+  if (!ensureConnectionReady(t('app.actions.unpinningSession'))) return;
   sessionError.value = '';
   if (!sessionId) return;
   try {
@@ -2719,14 +2724,14 @@ async function unpinSession(
       directory,
     });
   } catch (error) {
-    sessionError.value = `Session unpin failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionUnpinFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function handleTopPanelBatchSessionAction(payload: TopPanelBatchSessionActionPayload) {
   if (!payload || !Array.isArray(payload.sessions) || payload.sessions.length === 0) return;
 
-  if (!ensureConnectionReady('Batch session operation')) return;
+  if (!ensureConnectionReady(t('app.actions.batchSessionOperation'))) return;
 
   const targets = payload.sessions
     .map((entry): TopPanelBatchSessionTarget | null => {
@@ -2816,7 +2821,12 @@ async function handleTopPanelBatchSessionAction(payload: TopPanelBatchSessionAct
 
   if (failures.length > 0) {
     const firstError = failures[0];
-    sessionError.value = `Batch ${payload.action} partial failure (${failures.length}/${targets.length}). First error: ${firstError}`;
+    sessionError.value = t('app.error.batchOperationPartialFailure', {
+      action: payload.action,
+      failures: failures.length,
+      total: targets.length,
+      firstError,
+    });
   }
 }
 
@@ -2836,10 +2846,10 @@ function handleSidePanelUnpin(payload: { sessionId: string; projectId: string; d
 }
 
 async function handleForkMessage(payload: { sessionId: string; messageId: string }) {
-  if (!ensureConnectionReady('Fork')) return;
+  if (!ensureConnectionReady(t('app.actions.fork'))) return;
   sessionError.value = '';
   try {
-    sendStatus.value = 'Forking...';
+    sendStatus.value = t('app.status.forking');
     const data = (await openCodeApi.forkSession({
       sessionId: payload.sessionId,
       messageId: payload.messageId,
@@ -2850,45 +2860,45 @@ async function handleForkMessage(payload: { sessionId: string; messageId: string
       seedForkedSessionComposerDraft(payload, data);
       await switchSessionSelection(selectedProjectId.value, data.id);
     }
-    sendStatus.value = 'Forked.';
+    sendStatus.value = t('app.status.forked');
   } catch (error) {
-    sessionError.value = `Session fork failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionForkFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function handleRevertMessage(payload: { sessionId: string; messageId: string }) {
-  if (!ensureConnectionReady('Revert')) return;
+  if (!ensureConnectionReady(t('app.actions.revert'))) return;
   sessionError.value = '';
   try {
-    sendStatus.value = 'Reverting...';
+    sendStatus.value = t('app.status.reverting');
     await openCodeApi.revertSession({
       sessionId: payload.sessionId,
       messageId: payload.messageId,
       projectId: selectedProjectId.value,
       directory: activeDirectory.value.trim() || undefined,
     });
-    sendStatus.value = 'Reverted.';
+    sendStatus.value = t('app.status.reverted');
     if (selectedSessionId.value === payload.sessionId) void reloadSelectedSessionState();
   } catch (error) {
-    sessionError.value = `Session revert failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionRevertFailed', { message: toErrorMessage(error) });
   }
 }
 
 async function handleUndoRevert() {
   const sessionId = selectedSessionId.value;
   if (!sessionId) return;
-  if (!ensureConnectionReady('Undo')) return;
+  if (!ensureConnectionReady(t('app.actions.undo'))) return;
   sessionError.value = '';
   try {
-    sendStatus.value = 'Undoing...';
+    sendStatus.value = t('app.status.undoing');
     await openCodeApi.unrevertSession({
       sessionId,
       projectId: selectedProjectId.value,
       directory: activeDirectory.value.trim() || undefined,
     });
-    sendStatus.value = 'Undone.';
+    sendStatus.value = t('app.status.undone');
   } catch (error) {
-    sessionError.value = `Session undo failed: ${toErrorMessage(error)}`;
+    sessionError.value = t('app.error.sessionUndoFailed', { message: toErrorMessage(error) });
   }
 }
 
@@ -3122,15 +3132,12 @@ function showBrowserNotification(
     (entry) => entry.id === sessionId && resolveProjectIdForSession(entry.id) === projectId,
   );
   const kind =
-    type === 'permission' ? 'Permission' : type === 'question' ? 'Question' : 'Session idle';
+    type === 'permission' ? t('app.notification.permission') : type === 'question' ? t('app.notification.question') : t('app.notification.idle');
+  const sessionName = session ? sessionLabel(session) : sessionId;
   const body =
     type === 'idle'
-      ? session
-        ? `${sessionLabel(session)} is now idle.`
-        : `Session ${sessionId} is now idle.`
-      : session
-        ? `${sessionLabel(session)} requires your response.`
-        : `Session ${sessionId} requires your response.`;
+      ? t('app.notification.sessionIdle', { session: sessionName })
+      : t('app.notification.sessionRequiresResponse', { session: sessionName });
   const notification = new Notification(`${kind}`, {
     body,
     tag: `vis-${type}-${projectId}-${sessionId}`,
@@ -3303,7 +3310,7 @@ async function createPtySession(command?: string, args?: string[]) {
     command,
     args,
     cwd: directory,
-    title: 'Shell',
+    title: t('app.windowTitles.shell'),
   });
   return parsePtyInfo(data);
 }
@@ -3329,7 +3336,7 @@ function ensureShellWindow(pty: PtyInfo) {
     resizable: true,
     scroll: 'none',
     color: '#a855f7',
-    title: pty.title || 'Shell',
+    title: pty.title === 'One-shot PTY' ? t('app.windowTitles.oneShotPty') : (pty.title || t('app.windowTitles.shell')),
     width,
     height,
     x: randomPosition.x,
@@ -3811,8 +3818,8 @@ function findCommandByName(name: string) {
 }
 
 const DEBUG_SUBCOMMANDS: Record<string, string> = {
-  session: 'Show session graph tree',
-  notification: 'Dump pending notification state',
+  session: t('app.debug.session'),
+  notification: t('app.debug.notification'),
 };
 
 function formatSessionGraphDump(): string {
@@ -3830,8 +3837,8 @@ function formatSessionGraphDump(): string {
     );
   }, 0);
 
-  lines.push('Project Tree (worker-state)');
-  lines.push(`  projects: ${allProjects.length}  sessions(total): ${totalSessions}`);
+  lines.push(t('debug.projectTreeTitle'));
+  lines.push(`  ${t('debug.projectsCount')}: ${allProjects.length}  ${t('debug.sessionsTotal')}: ${totalSessions}`);
   lines.push('');
 
   function fmtTime(ts?: number) {
@@ -3840,24 +3847,24 @@ function formatSessionGraphDump(): string {
   }
 
   function fmtStatus(s: string) {
-    if (s === 'busy') return '[BUSY]';
-    if (s === 'retry') return '[RETRY]';
-    if (s === 'idle') return '[idle]';
+    if (s === 'busy') return t('debug.sessionStatus.busy');
+    if (s === 'retry') return t('debug.sessionStatus.retry');
+    if (s === 'idle') return t('debug.sessionStatus.idle');
     return `[${s}]`;
   }
 
   for (const project of allProjects) {
-    lines.push(`PROJECT ${project.id}`);
-    lines.push(`  worktree: ${project.worktree || '-'}`);
-    if (project.name) lines.push(`  name: ${project.name}`);
-    if (project.icon?.color) lines.push(`  color: ${project.icon.color}`);
+    lines.push(`${t('debug.projectLabel')} ${project.id}`);
+    lines.push(`  ${t('debug.worktreeLabel')}: ${project.worktree || '-'}`);
+    if (project.name) lines.push(`  ${t('debug.nameLabel')}: ${project.name}`);
+    if (project.icon?.color) lines.push(`  ${t('debug.colorLabel')}: ${project.icon.color}`);
     lines.push(
-      `  time: created=${fmtTime(project.time?.created)} updated=${fmtTime(project.time?.updated)} initialized=${fmtTime(project.time?.initialized)}`,
+      `  ${t('debug.timeLabel')}: ${t('debug.createdLabel')}=${fmtTime(project.time?.created)} ${t('debug.updatedLabel')}=${fmtTime(project.time?.updated)} ${t('debug.initializedLabel')}=${fmtTime(project.time?.initialized)}`,
     );
 
     const sandboxEntries = Object.entries(project.sandboxes).sort(([a], [b]) => a.localeCompare(b));
     if (sandboxEntries.length === 0) {
-      lines.push('  (no sandboxes)');
+      lines.push(`  ${t('debug.noSandboxes')}`);
       lines.push('');
       continue;
     }
@@ -3868,9 +3875,9 @@ function formatSessionGraphDump(): string {
       const sConnector = isLastSandbox ? '└── ' : '├── ';
       const sPrefix = isLastSandbox ? '    ' : '│   ';
 
-      const branchMeta = sandbox.name ? `  (branch: ${sandbox.name})` : '';
-      lines.push(`${sConnector}SANDBOX ${sandboxDirectory}${branchMeta}`);
-      lines.push(`${sPrefix}rootSessions: [${sandbox.rootSessions.join(', ')}]`);
+      const branchMeta = sandbox.name ? `  (${t('debug.branchLabel')}: ${sandbox.name})` : '';
+      lines.push(`${sConnector}${t('debug.sandboxLabel')} ${sandboxDirectory}${branchMeta}`);
+      lines.push(`${sPrefix}${t('debug.rootSessionsLabel')}: [${sandbox.rootSessions.join(', ')}]`);
 
       const sessions = Object.values(sandbox.sessions).sort((a, b) => {
         const aTime = a.timeUpdated ?? a.timeCreated ?? 0;
@@ -3879,7 +3886,7 @@ function formatSessionGraphDump(): string {
       });
 
       if (sessions.length === 0) {
-        lines.push(`${sPrefix}(no sessions)`);
+        lines.push(`${sPrefix}${t('debug.noSessions')}`);
         continue;
       }
 
@@ -3896,10 +3903,10 @@ function formatSessionGraphDump(): string {
           ? `msg=${session.revert.messageID}${session.revert.partID ? ` part=${session.revert.partID}` : ''}`
           : '-';
         lines.push(
-          `${sessionPrefix}dir=${session.directory || sandboxDirectory}  parent=${session.parentID || '(root)'}  archived=${fmtTime(session.timeArchived)}  revert=${revertLabel}`,
+          `${sessionPrefix}${t('debug.dirLabel')}=${session.directory || sandboxDirectory}  ${t('debug.parentLabel')}=${session.parentID || t('debug.root')}  ${t('debug.archivedLabel')}=${fmtTime(session.timeArchived)}  ${t('debug.revertLabel')}=${revertLabel}`,
         );
         lines.push(
-          `${sessionPrefix}created=${fmtTime(session.timeCreated)}  updated=${fmtTime(session.timeUpdated)}`,
+          `${sessionPrefix}${t('debug.createdLabel')}=${fmtTime(session.timeCreated)}  ${t('debug.updatedLabel')}=${fmtTime(session.timeUpdated)}`,
         );
       }
     }
@@ -3927,7 +3934,7 @@ function openDebugSessionViewer() {
     resizable: true,
     focusOnOpen: true,
     scroll: 'manual',
-    title: 'Debug: Session Graph',
+    title: t('app.windowTitles.debugSessionGraph'),
     x: pos.x,
     y: pos.y,
     width: FILE_VIEWER_WINDOW_WIDTH,
@@ -3942,7 +3949,7 @@ function formatNotificationDump(): string {
   const order = notificationSessionOrder.value;
   const parentMap = sessionParentById.value;
 
-  lines.push(`Notification State`);
+  lines.push(t('app.debug.notificationState'));
   lines.push(`  pendingNotificationsBySessionId: ${Object.keys(map).length} session(s)`);
   lines.push(`  notificationSessionOrder: [${order.length}] ${order.join(', ') || '(empty)'}`);
   lines.push(`  selectedSessionId: ${selectedSessionId.value || '(none)'}`);
@@ -4010,12 +4017,12 @@ function formatNotificationDump(): string {
   const permissionEntries = fw.entries.value.filter((e) => e.key.startsWith('permission:'));
   const questionEntries = fw.entries.value.filter((e) => e.key.startsWith('question:'));
   lines.push(`Active Floating Windows:`);
-  lines.push(`  Permission windows: ${permissionEntries.length}`);
+  lines.push(`  ${t('app.debug.permissionWindows')}: ${permissionEntries.length}`);
   for (const entry of permissionEntries) {
     const req = entry.props?.request as { id?: string; sessionID?: string } | undefined;
     lines.push(`    - ${entry.key}  session=${req?.sessionID ?? '?'}  request=${req?.id ?? '?'}`);
   }
-  lines.push(`  Question windows: ${questionEntries.length}`);
+  lines.push(`  ${t('app.debug.questionWindows')}: ${questionEntries.length}`);
   for (const entry of questionEntries) {
     const req = entry.props?.request as { id?: string; sessionID?: string } | undefined;
     lines.push(`    - ${entry.key}  session=${req?.sessionID ?? '?'}  request=${req?.id ?? '?'}`);
@@ -4041,7 +4048,7 @@ function openDebugNotificationViewer() {
     resizable: true,
     focusOnOpen: true,
     scroll: 'manual',
-    title: 'Debug: Notifications',
+    title: t('app.windowTitles.debugNotifications'),
     x: pos.x,
     y: pos.y,
     width: FILE_VIEWER_WINDOW_WIDTH,
@@ -4053,7 +4060,7 @@ function openDebugNotificationViewer() {
 function runDebugCommand(args: string): { ok: boolean; message: string } {
   const sub = args.trim().toLowerCase();
   if (!sub || sub === 'help') {
-    const lines = ['Available /debug subcommands:'];
+    const lines = [t('app.debug.availableSubcommands')];
     for (const [name, desc] of Object.entries(DEBUG_SUBCOMMANDS)) {
       lines.push(`  ${name} — ${desc}`);
     }
@@ -4061,17 +4068,17 @@ function runDebugCommand(args: string): { ok: boolean; message: string } {
   }
   if (sub === 'session' || sub === 'sessions') {
     openDebugSessionViewer();
-    return { ok: true, message: 'Session graph opened.' };
+    return { ok: true, message: t('app.debug.sessionOpened') };
   }
   if (sub === 'notification' || sub === 'notifications') {
     openDebugNotificationViewer();
-    return { ok: true, message: 'Notification dump opened.' };
+    return { ok: true, message: t('app.debug.notificationOpened') };
   }
-  return { ok: false, message: `Unknown debug subcommand: ${sub}. Type /debug help for a list.` };
+  return { ok: false, message: t('app.debug.unknownSubcommand', { sub }) };
 }
 
 async function sendCommand(sessionId: string, command: CommandInfo, commandArgs: string) {
-  if (!ensureConnectionReady('Sending commands')) return;
+  if (!ensureConnectionReady(t('app.actions.sendingCommands'))) return;
   const directory = activeDirectory.value.trim();
   await opencodeApi.sendCommand(sessionId, {
     directory: directory || undefined,
@@ -4084,7 +4091,7 @@ async function sendCommand(sessionId: string, command: CommandInfo, commandArgs:
 }
 
 async function sendMessage() {
-  if (!ensureConnectionReady('Sending')) return;
+  if (!ensureConnectionReady(t('app.actions.sending'))) return;
   if (!canSend.value) return;
   const text = messageInput.value.trim();
   const hasText = text.length > 0;
@@ -4097,7 +4104,7 @@ async function sendMessage() {
       ? filteredSessions.value.find((session) => session.id === fallbackId)
       : filteredSessions.value[0];
     if (!fallback) {
-      sendStatus.value = 'No session selected.';
+      sendStatus.value = t('app.error.noSessionSelected');
       return;
     }
     selectedSessionId.value = fallback.id;
@@ -4116,11 +4123,11 @@ async function sendMessage() {
   messageInput.value = '';
   enableFollow();
   isSending.value = true;
-  sendStatus.value = 'Sending...';
+    sendStatus.value = t('app.status.sending');
   try {
     if (slash && slash.name.toLowerCase() === 'shell') {
       await openShellFromInput(slash.arguments ?? '');
-      sendStatus.value = 'Shell ready.';
+      sendStatus.value = t('app.status.shellReady');
       clearComposerDraftForCurrentContext();
       return;
     }
@@ -4132,7 +4139,7 @@ async function sendMessage() {
     }
     if (slash && commandMatch) {
       await sendCommand(sessionId, commandMatch, slash.arguments ?? '');
-      sendStatus.value = 'Sent.';
+      sendStatus.value = t('app.status.sent');
       clearComposerDraftForCurrentContext();
       return;
     }
@@ -4160,11 +4167,11 @@ async function sendMessage() {
       variant: selectedThinking.value,
       parts,
     });
-    sendStatus.value = 'Sent.';
+    sendStatus.value = t('app.status.sent');
     attachments.value = [];
     clearComposerDraftForCurrentContext();
   } catch (error) {
-    sendStatus.value = `Send failed: ${toErrorMessage(error)}`;
+    sendStatus.value = t('app.error.sendFailed', { message: toErrorMessage(error) });
   } finally {
     isSending.value = false;
   }
@@ -4338,11 +4345,11 @@ function focusInput() {
 }
 
 async function abortSession() {
-  if (!ensureConnectionReady('Stopping')) return;
+  if (!ensureConnectionReady(t('app.actions.stopping'))) return;
   const sessionId = selectedSessionId.value;
   if (!sessionId || isAborting.value) return;
   isAborting.value = true;
-  sendStatus.value = 'Stopping...';
+    sendStatus.value = t('app.status.stopping');
   try {
     const directory = activeDirectory.value.trim();
     const busyDescendants = busyDescendantSessionIds.value;
@@ -4353,9 +4360,9 @@ async function abortSession() {
       ),
     ];
     await Promise.all(abortPromises);
-    sendStatus.value = 'Stopped.';
+    sendStatus.value = t('app.status.stopped');
   } catch (error) {
-    sendStatus.value = `Stop failed: ${toErrorMessage(error)}`;
+    sendStatus.value = t('app.error.stopFailed', { message: toErrorMessage(error) });
   } finally {
     isAborting.value = false;
   }
@@ -4622,6 +4629,16 @@ const toolRendererReadTypesKey = `FILE_${'READ'}_EVENT_TYPES`;
 const toolRendererWriteTypesKey = `FILE_${'WRITE'}_EVENT_TYPES`;
 const toolRendererMessageTypesKey = `MESSAGE_${'EVENT_TYPES'}`;
 
+function renderWorkerHtmlWithI18n(args: Omit<RenderRequest, 'copyButtonLabel' | 'copiedLabel' | 'copyCodeAriaLabel' | 'copyMarkdownAriaLabel'>) {
+  return renderWorkerHtml({
+    ...args,
+    copyButtonLabel: t('render.copyCode'),
+    copiedLabel: t('render.copied'),
+    copyCodeAriaLabel: t('render.copyCodeAria'),
+    copyMarkdownAriaLabel: t('render.copyMarkdownAria'),
+  });
+}
+
 const toolRendererHelpers = {
   [toolRendererReadTypesKey]: TOOL_RENDERER_READ_EVENT_TYPES,
   [toolRendererWriteTypesKey]: TOOL_RENDERER_WRITE_EVENT_TYPES,
@@ -4631,7 +4648,7 @@ const toolRendererHelpers = {
   shouldRenderToolWindow,
   extractToolOutputText: parseToolOutputText,
   formatToolValue,
-  renderWorkerHtml,
+  renderWorkerHtml: renderWorkerHtmlWithI18n,
   renderReadHtmlFromApi,
   resolveReadWritePath,
   guessLanguageFromPath,
@@ -4741,8 +4758,8 @@ async function renderReadHtmlFromApi(params: {
     });
 
   const directory = activeDirectory.value.trim();
-  if (!directory) return renderText('No active directory selected for READ window.');
-  if (!params.path) return renderText('READ path is missing in tool payload.');
+  if (!directory) return renderText(t('app.read.noActiveDirectory'));
+  if (!params.path) return renderText(t('app.read.pathMissing'));
 
   const requestPath = splitFileContentDirectoryAndPath(params.path, directory);
 
@@ -4761,7 +4778,7 @@ async function renderReadHtmlFromApi(params: {
           return record.type === 'directory' ? `${name}/` : name;
         })
         .filter((entry): entry is string => Boolean(entry));
-      const code = entries.length > 0 ? entries.join('\n') : '(empty directory)';
+      const code = entries.length > 0 ? entries.join('\n') : t('app.read.emptyDirectory');
       return renderText(code, 'none');
     }
   } catch {
@@ -4776,7 +4793,7 @@ async function renderReadHtmlFromApi(params: {
     const type = data?.type === 'binary' ? 'binary' : 'text';
 
     if (type === 'binary') {
-      return renderText(`Binary file: ${params.path}\nPreview is not available.`, 'none');
+      return renderText(t('app.read.binaryFile', { path: params.path }), 'none');
     }
 
     const code = decodeApiTextContent(data);
@@ -4801,7 +4818,7 @@ async function renderReadHtmlFromApi(params: {
         lineLimit: params.lineLimit,
       });
     }
-    return renderText(`Failed to load: ${params.path ?? 'unknown file'}`);
+    return renderText(t('app.read.failedToLoad', { path: params.path ?? 'unknown file' }));
   }
 }
 
@@ -4964,10 +4981,10 @@ async function openGitDiff(payload: { path: string; staged: boolean }) {
     return;
   }
 
-  const mode = staged ? 'staged' : 'unstaged';
+  const mode = staged ? t('app.git.staged') : t('app.git.unstaged');
   const pos = getFileViewerPosition();
   await fw.open(key, {
-    content: `Loading ${mode} diff for ${path}...`,
+    content: t('app.git.loadingDiff', { mode, path }),
     lang: 'text',
     variant: 'plain',
     closable: true,
@@ -5035,14 +5052,14 @@ async function openAllGitDiff(mode: WorktreeSnapshotMode = 'all') {
 
   const pos = getFileViewerPosition();
   await fw.open(key, {
-    content: 'Loading all changes...',
+    content: t('app.git.loadingAllChanges'),
     lang: 'text',
     variant: 'plain',
     closable: true,
     resizable: true,
     focusOnOpen: true,
     scroll: 'manual',
-    title: 'Loading...',
+    title: t('app.git.loading'),
     x: pos.x,
     y: pos.y,
     width: FILE_VIEWER_WINDOW_WIDTH,
@@ -5055,17 +5072,17 @@ async function openAllGitDiff(mode: WorktreeSnapshotMode = 'all') {
       '--noprofile',
       '--norc',
       '-c',
-      buildWorktreeSnapshotScript(mode),
+      buildWorktreeSnapshotScript(mode, t),
     ]);
     const snapshot = parseCommitSnapshotOutput(output);
     if (snapshot.files.length === 0) {
-      throw new Error('no files parsed from working tree snapshot');
+      throw new Error(t('errors.noFilesInWorktreeSnapshot'));
     }
     if (!fw.has(key)) return;
 
     const first = snapshot.files[0];
     const title =
-      snapshot.files.length === 1 ? first.file : `${snapshot.files.length} files changed`;
+      snapshot.files.length === 1 ? first.file : t('app.git.filesChanged', { count: snapshot.files.length });
     const diffTabs =
       snapshot.files.length > 1
         ? snapshot.files.map((entry) => ({
@@ -5123,7 +5140,7 @@ function handleShowMessageDiff(payload: { messageKey: string; diffs: Array<Messa
   );
   const combinedDiff = hasBeforeAfter ? '' : diffs.map((d) => d.diff).join('\n');
   const fileCount = diffs.length;
-  const title = fileCount === 1 ? diffs[0].file : `${fileCount} files changed`;
+  const title = fileCount === 1 ? diffs[0].file : t('app.git.filesChanged', { count: fileCount });
   const firstFile = diffs[0]?.file ?? '';
 
   let diffTabs: Array<{ file: string; before: string; after: string }> | undefined;
@@ -5175,14 +5192,14 @@ async function handleShowCommit(hashRaw: string) {
 
   const pos = getFileViewerPosition();
   await fw.open(key, {
-    content: `Loading commit ${hash}...`,
+    content: t('app.git.loadingCommit', { hash }),
     lang: 'text',
     variant: 'plain',
     closable: true,
     resizable: true,
     focusOnOpen: true,
     scroll: 'manual',
-    title: `commit ${hash}`,
+    title: t('app.git.commitTitle', { hash }),
     x: pos.x,
     y: pos.y,
     width: FILE_VIEWER_WINDOW_WIDTH,
@@ -5201,14 +5218,14 @@ async function handleShowCommit(hashRaw: string) {
     ]);
     const snapshot = parseCommitSnapshotOutput(output);
     if (snapshot.files.length === 0) {
-      throw new Error('no files parsed from commit snapshot');
+      throw new Error(t('errors.noFilesInCommitSnapshot'));
     }
     if (!fw.has(key)) return;
 
     const first = snapshot.files[0];
     const title =
       snapshot.title ||
-      (snapshot.files.length === 1 ? first.file : `${snapshot.files.length} files changed`);
+      (snapshot.files.length === 1 ? first.file : t('app.git.filesChanged', { count: snapshot.files.length }));
     const diffTabs =
       snapshot.files.length > 1
         ? snapshot.files.map((entry) => ({
@@ -5267,7 +5284,7 @@ function openToolPartAsWindow(
     },
   };
 
-  const patchEvents = extractToolPatch(payload, toolRendererHelpers as any);
+  const patchEvents = extractToolPatch(payload, toolRendererHelpers as any, t);
   if (patchEvents) {
     patchEvents.forEach((patchEvent: any, index: number) => {
       const rawId = patchEvent.callId ?? `apply_patch:${index}`;
@@ -5301,6 +5318,7 @@ function openToolPartAsWindow(
     payload,
     'message.part.updated',
     toolRendererHelpers as any,
+    t,
   );
   const fileReads = fileReadResult
     ? Array.isArray(fileReadResult)
@@ -5375,7 +5393,7 @@ function handleOpenHistoryReasoning(payload: { part: ReasoningPart }) {
       entries: [{ id: payload.part.id, text: payload.part.text }],
       theme: 'github-dark',
     },
-    title: '🤔 Thought',
+    title: t('app.windowTitles.thought'),
     scroll: 'manual',
     closable: true,
     resizable: true,
@@ -5424,7 +5442,7 @@ function handleShowThreadHistory(payload: { entries: ThreadHistoryEntry[] }) {
       onToolClick: (part: ToolPart) => handleOpenHistoryTool({ part }),
       onReasoningClick: (part: ReasoningPart) => handleOpenHistoryReasoning({ part }),
     },
-    title: 'Thread History',
+    title: t('app.windowTitles.threadHistory'),
     scroll: 'follow',
     smoothEngine: 'native',
     closable: true,
@@ -5458,7 +5476,7 @@ function handleOpenImage(payload: { url: string; filename: string }) {
     resizable: true,
     focusOnOpen: true,
     scroll: 'manual',
-    title: filename || 'Image',
+    title: filename || t('app.windowTitles.image'),
     x: pos.x,
     y: pos.y,
     width: 800,
@@ -5470,7 +5488,7 @@ function handleOpenImage(payload: { url: string; filename: string }) {
 async function handleEditMessage(payload: { sessionId: string; part: MessagePart }) {
   const directory = activeDirectory.value.trim();
   if (payload.part.type !== 'text') return;
-  const nextText = window.prompt('Edit message', payload.part.text);
+  const nextText = window.prompt(t('app.prompt.editMessage'), payload.part.text);
   if (nextText === null) return;
   const trimmed = nextText.trimEnd();
   if (!trimmed) return;
@@ -5542,7 +5560,7 @@ async function openFileViewer(path: string, lines?: string) {
     fw.updateOptions(key, {
       props: {
         path,
-        rawHtml: 'No active directory selected.',
+        rawHtml: t('app.read.noActiveDirectorySelected'),
         lines,
         gutterMode: 'none',
         theme: shikiTheme.value,
@@ -5566,8 +5584,7 @@ async function openFileViewer(path: string, lines?: string) {
         fw.updateOptions(key, {
           props: {
             path,
-            rawHtml:
-              'Binary content is not included in this API response.\nUnable to render hexdump for this file.',
+            rawHtml: t('app.read.binaryContentNotIncluded'),
             lines,
             gutterMode: 'none',
             theme: shikiTheme.value,
@@ -5603,7 +5620,7 @@ async function openFileViewer(path: string, lines?: string) {
     fw.updateOptions(key, {
       props: {
         path,
-        rawHtml: `File load failed: ${toErrorMessage(error)}`,
+        rawHtml: t('app.error.fileLoadFailed', { message: toErrorMessage(error) }),
         lines,
         gutterMode: 'none',
         theme: shikiTheme.value,
@@ -5687,11 +5704,11 @@ function formatRetryTime(timestamp: number): string {
 
   let relative: string;
   if (diffHour > 1) {
-    relative = `in ${diffHour} hours`;
+    relative = t('time.inHours', { count: diffHour });
   } else if (diffMin > 1) {
-    relative = `in ${diffMin} minutes`;
+    relative = t('time.inMinutes', { count: diffMin });
   } else {
-    relative = `in ${diffSec} seconds`;
+    relative = t('time.inSeconds', { count: diffSec });
   }
 
   return `${absolute} (${relative})`;
@@ -5773,19 +5790,19 @@ async function startInitialization() {
   reconnectingMessage.value = '';
   try {
     connectionState.value = 'connecting';
-    initLoadingMessage.value = 'Connecting to SSE stream...';
+    initLoadingMessage.value = t('app.connection.connecting');
     await ge.connect({ failFast: true, timeoutMs: 10000 });
     connectionState.value = 'bootstrapping';
-    initLoadingMessage.value = 'Loading server path...';
+    initLoadingMessage.value = t('app.status.loadingServerPath');
     await fetchHomePath();
-    initLoadingMessage.value = 'Loading projects and sessions...';
+    initLoadingMessage.value = t('app.status.loadingProjects');
     await bootstrapSelections();
     if (selectedSessionId.value) {
-      initLoadingMessage.value = 'Loading session history...';
+      initLoadingMessage.value = t('app.status.loadingSessionHistory');
       await reloadSelectedSessionState();
     }
     if (activeDirectory.value) {
-      initLoadingMessage.value = 'Loading worktree state...';
+      initLoadingMessage.value = t('app.status.loadingWorktreeState');
       const directory = activeDirectory.value || undefined;
       await Promise.all([
         fetchCommands(directory),
@@ -5883,7 +5900,7 @@ onMounted(() => {
       if (connectionState.value === 'reconnecting' || connectionState.value === 'error') {
         connectionState.value = 'ready';
         reconnectingMessage.value = '';
-        sendStatus.value = 'Ready';
+        sendStatus.value = t('app.connection.connected');
       }
       if (bootstrapReady.value) {
         syncActiveSelectionToWorker();
@@ -5895,7 +5912,7 @@ onMounted(() => {
     ge.on('connection.reconnected', () => {
       connectionState.value = 'ready';
       reconnectingMessage.value = '';
-      sendStatus.value = 'Ready';
+      sendStatus.value = t('app.connection.connected');
       syncActiveSelectionToWorker();
       void fetchProviders(true);
     }),
@@ -5913,12 +5930,12 @@ onMounted(() => {
       }
       if (uiInitState.value === 'loading') {
         connectionState.value = 'error';
-        initErrorMessage.value = 'Failed to connect to SSE stream.';
+        initErrorMessage.value = t('app.errors.sseConnectFailed');
         uiInitState.value = 'login';
         return;
       }
       connectionState.value = 'reconnecting';
-      reconnectingMessage.value = 'Reconnecting...';
+      reconnectingMessage.value = t('app.connection.reconnecting');
     }),
   );
   globalEventUnsubscribers.push(

@@ -67,6 +67,7 @@ import {
   type StyleValue,
 } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useI18n } from 'vue-i18n';
 
 export interface DropdownAPI {
   select: (item: unknown) => void;
@@ -128,10 +129,12 @@ const menuStyle = computed<StyleValue>(() => ({
   positionAnchor: anchorName,
 }));
 
+const { t } = useI18n();
+
 const displayLabel = computed(() => {
   if (props.label) return props.label;
   if (props.modelValue !== undefined && props.modelValue !== null) return String(props.modelValue);
-  return props.placeholder ?? 'Select';
+  return props.placeholder ?? t('dropdown.selectPlaceholder');
 });
 
 function updateCandidateValues() {

@@ -28,6 +28,7 @@ type UseReasoningWindowsOptions = {
   reasoningCloseDelayMs: number;
   resolveModelName?: (providerID: string, modelID: string) => string | undefined;
   suppressAutoWindows?: Ref<boolean>;
+  t: (key: string, values?: Record<string, string | number>) => string;
 };
 
 const REASONING_WINDOW_PREFIX = 'reasoning:';
@@ -42,6 +43,7 @@ export function useReasoningWindows(options: UseReasoningWindowsOptions) {
     reasoningCloseDelayMs,
     resolveModelName,
     suppressAutoWindows,
+    t,
   } = options;
   let boundScope = options.scope;
   const acc = useDeltaAccumulator();
@@ -186,7 +188,9 @@ export function useReasoningWindows(options: UseReasoningWindowsOptions) {
       : isSubagent
         ? '[subagent]'
         : undefined;
-    const title = titleTag ? `🤔 ${titleTag} Thinking...` : '🤔 Thinking...';
+    const title = titleTag
+      ? t('app.windowTitles.reasoningWithTag', { tag: titleTag })
+      : t('app.windowTitles.reasoningSimple');
 
     if (!suppressAutoWindows?.value) {
       void fw.open(windowKey, {

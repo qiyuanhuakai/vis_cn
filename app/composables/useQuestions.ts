@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import QuestionContent from '../components/ToolWindow/Question.vue';
 import * as opencodeApi from '../utils/opencode';
 import type { useFloatingWindows } from './useFloatingWindows';
@@ -39,6 +40,7 @@ export function useQuestions(options: {
   ensureConnectionReady: (action: string) => boolean;
   getTextContent: (messageId: string) => string;
 }) {
+  const { t } = useI18n();
   const questionSendingById = ref<Record<string, boolean>>({});
   const questionErrorById = ref<Record<string, string>>({});
 
@@ -133,7 +135,7 @@ export function useQuestions(options: {
       resizable: true,
       scroll: 'follow',
       color: '#34d399',
-      title: `Question: ${request.questions?.[0]?.header || 'request'}`,
+      title: t('app.windowTitles.question', { title: request.questions?.[0]?.header || 'request' }),
       width: QUESTION_WINDOW_WIDTH,
       height: QUESTION_WINDOW_HEIGHT,
       expiry: Infinity,
@@ -221,7 +223,7 @@ export function useQuestions(options: {
   }
 
   async function sendQuestionReply(requestId: string, answers: QuestionAnswer[]): Promise<void> {
-    if (!options.ensureConnectionReady('Question reply')) return;
+    if (!options.ensureConnectionReady(t('app.actions.questionReply'))) return;
     const directory = options.activeDirectory.value.trim();
     await opencodeApi.replyQuestion(requestId, {
       directory: directory || undefined,
@@ -230,7 +232,7 @@ export function useQuestions(options: {
   }
 
   async function sendQuestionReject(requestId: string): Promise<void> {
-    if (!options.ensureConnectionReady('Question reject')) return;
+    if (!options.ensureConnectionReady(t('app.actions.questionReject'))) return;
     const directory = options.activeDirectory.value.trim();
     await opencodeApi.rejectQuestion(requestId, directory || undefined);
   }
@@ -239,7 +241,7 @@ export function useQuestions(options: {
     requestId: string;
     answers: QuestionAnswer[];
   }): Promise<void> {
-    if (!options.ensureConnectionReady('Question reply')) return;
+    if (!options.ensureConnectionReady(t('app.actions.questionReply'))) return;
     const { requestId, answers } = payload;
     if (isQuestionSubmitting(requestId)) return;
     clearQuestionError(requestId);
@@ -258,7 +260,7 @@ export function useQuestions(options: {
   }
 
   async function handleQuestionReject(requestId: string): Promise<void> {
-    if (!options.ensureConnectionReady('Question reject')) return;
+    if (!options.ensureConnectionReady(t('app.actions.questionReject'))) return;
     if (isQuestionSubmitting(requestId)) return;
     clearQuestionError(requestId);
     setQuestionSending(requestId, true);

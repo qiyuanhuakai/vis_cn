@@ -20,6 +20,10 @@
         :code="effectiveFileContent || ''"
         lang="markdown"
         :theme="theme"
+        :copy-button-label="t('render.copyCode')"
+        :copied-label="t('render.copied')"
+        :copy-code-aria-label="t('render.copyCodeAria')"
+        :copy-markdown-aria-label="t('render.copyMarkdownAria')"
         @rendered="emit('rendered')"
       />
       <HexRenderer v-else-if="activeMode === 'hex'" :raw-html="effectiveRawHtml" />
@@ -40,11 +44,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import hexdump from '@kikuchan/hexdump';
 import CodeRenderer from '../renderers/CodeRenderer.vue';
 import HexRenderer from '../renderers/HexRenderer.vue';
 import ImageRenderer from '../renderers/ImageRenderer.vue';
 import MarkdownRenderer from '../renderers/MarkdownRenderer.vue';
+
+const { t } = useI18n();
 
 type ModeId = 'rendered' | 'source' | 'image' | 'hex';
 
@@ -145,15 +152,15 @@ const effectiveRawHtml = computed(() => {
 
 const availableModes = computed<Array<{ id: ModeId; label: string }>>(() => {
   const modes: Array<{ id: ModeId; label: string }> = [];
-  if (effectiveImageSrc.value) modes.push({ id: 'image', label: 'Image' });
+  if (effectiveImageSrc.value) modes.push({ id: 'image', label: t('viewers.content.image') });
   if (isMarkdown.value && effectiveFileContent.value != null) {
-    modes.push({ id: 'rendered', label: 'Rendered' });
-    modes.push({ id: 'source', label: 'Source' });
+    modes.push({ id: 'rendered', label: t('viewers.content.rendered') });
+    modes.push({ id: 'source', label: t('viewers.content.source') });
   } else if (effectiveFileContent.value != null && !isBitmapImage.value) {
-    modes.push({ id: 'source', label: 'Source' });
+    modes.push({ id: 'source', label: t('viewers.content.source') });
   }
-  if (effectiveRawHtml.value) modes.push({ id: 'hex', label: 'Hex' });
-  if (modes.length === 0) modes.push({ id: 'source', label: 'Source' });
+  if (effectiveRawHtml.value) modes.push({ id: 'hex', label: t('viewers.content.hex') });
+  if (modes.length === 0) modes.push({ id: 'source', label: t('viewers.content.source') });
   return modes;
 });
 

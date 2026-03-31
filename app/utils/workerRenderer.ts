@@ -1,6 +1,6 @@
 import RenderWorker from '../workers/render-worker?worker';
 
-type RenderRequest = {
+export type RenderRequest = {
   id: string;
   code: string;
   patch?: string;
@@ -13,6 +13,13 @@ type RenderRequest = {
   lineOffset?: number;
   lineLimit?: number;
   files?: string[];
+  // Localization strings for copy buttons
+  copyButtonLabel?: string;
+  copiedLabel?: string;
+  copyCodeAriaLabel?: string;
+  copyMarkdownAriaLabel?: string;
+  // Error message localization
+  errorLabel?: string;
 };
 
 type RenderResponse =
@@ -22,6 +29,7 @@ type RenderResponse =
 type PendingEntry = {
   resolve: (value: string) => void;
   reject: (reason: Error) => void;
+  errorLabel?: string;
 };
 
 let renderWorker: Worker | null = null;
@@ -37,7 +45,7 @@ function getWorker() {
     if (!entry) return;
     pending.delete(data.id);
     if (data.ok) entry.resolve(data.html);
-    else entry.reject(new Error(data.error || 'Render failed'));
+    else entry.reject(new Error(data.error || entry.errorLabel || 'Render failed'));
   };
   worker.onerror = (error) => {
     pending.forEach((entry) => entry.reject(new Error(String(error))));
@@ -49,7 +57,7 @@ function getWorker() {
 export function renderWorkerHtml(payload: RenderRequest) {
   const id = payload.id;
   return new Promise<string>((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    pending.set(id, { resolve, reject, errorLabel: payload.errorLabel });
     getWorker().postMessage(payload);
   });
 }

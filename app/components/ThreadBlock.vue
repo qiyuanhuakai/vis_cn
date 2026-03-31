@@ -83,10 +83,10 @@
             v-if="showHistoryButton(root)"
             type="button"
             class="ib-action ib-action-history"
-            :title="`${getHistoryEntries(root).length} entries - click to view history`"
+            :title="t('threadBlock.historyTitle', { count: getHistoryEntries(root).length })"
             @click="showThreadHistory(root)"
           >
-            History ({{ getHistoryEntries(root).length }})
+            {{ t('threadBlock.historyLabel') }} ({{ getHistoryEntries(root).length }})
           </button>
         </div>
       </Transition>
@@ -94,7 +94,7 @@
 
     <div v-if="!isRevertedPreview && getThreadError(root)" class="ib-error-bar">
       <span class="ib-error-icon">⊘</span>
-      <span class="ib-error-text">{{ formatMessageError(getThreadError(root)!) }}</span>
+      <span class="ib-error-text">{{ formatMessageError(getThreadError(root)!, (key) => t(key)) }}</span>
     </div>
 
     <ThreadFooter
@@ -113,6 +113,7 @@
 
 <script setup lang="ts">
 import { computed, Transition } from 'vue';
+import { useI18n } from 'vue-i18n';
 import MessageViewer from './MessageViewer.vue';
 import ThreadFooter from './ThreadFooter.vue';
 import ThreadTarget from './ThreadTarget.vue';
@@ -129,6 +130,8 @@ import type {
 } from '../types/message';
 import type { MessageInfo, QuestionInfo, ToolPart } from '../types/sse';
 import { formatElapsedTime, formatMessageError, formatMessageTime } from '../utils/formatters';
+
+const { t } = useI18n();
 
 const HISTORY_TOOL_NAMES = new Set(['bash', 'write', 'edit', 'multiedit', 'apply_patch']);
 
@@ -380,19 +383,19 @@ function canRevertThread(root: MessageInfo): boolean {
 function confirmFork() {
   const root = props.root;
   if (root.role !== 'user' || !root.sessionID || !root.id) return;
-  if (!window.confirm('Fork from this message?')) return;
+  if (!window.confirm(t('threadBlock.confirmFork'))) return;
   emit('fork-message', { sessionId: root.sessionID, messageId: root.id });
 }
 
 function confirmRevert(root: MessageInfo) {
   if (root.role !== 'user' || !root.sessionID || !root.id) return;
-  if (!window.confirm('Revert to this message?')) return;
+  if (!window.confirm(t('threadBlock.confirmRevert'))) return;
   emit('revert-message', { sessionId: root.sessionID, messageId: root.id });
 }
 
 function confirmUndoRevert() {
   if (!props.sessionRevert) return;
-  if (!window.confirm('Undo revert?')) return;
+  if (!window.confirm(t('threadBlock.confirmUndoRevert'))) return;
   emit('undo-revert');
 }
 

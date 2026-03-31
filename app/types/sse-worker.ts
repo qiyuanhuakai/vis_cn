@@ -6,6 +6,9 @@ export type TabToWorkerMessage =
       type: 'connect';
       baseUrl: string;
       authorization?: string;
+      errorMessages?: {
+        emptyBaseUrl?: string;
+      };
     }
   | {
       type: 'disconnect';

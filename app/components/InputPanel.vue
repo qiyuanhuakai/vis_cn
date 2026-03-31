@@ -38,7 +38,7 @@
                 type="button"
                 class="history-action-button"
                 :class="{ 'is-favorited': isFavorite(entry) }"
-                title="Bookmark"
+                :title="$t('inputPanel.bookmark')"
                 @click.stop="addFavorite(entry)"
               >
                 <Icon icon="lucide:bookmark" :width="14" :height="14" />
@@ -83,7 +83,7 @@
               <button
                 type="button"
                 class="history-action-button remove"
-                title="Remove from favorites"
+                :title="$t('inputPanel.removeFromFavorites')"
                 @click.stop="confirmRemoveFavorite(i)"
               >
                 <Icon icon="lucide:trash-2" :width="14" :height="14" />
@@ -99,7 +99,7 @@
         v-model="messageValue"
         class="input-textarea"
         :disabled="false"
-        placeholder="Send a message..."
+        :placeholder="$t('inputPanel.placeholder')"
         @keydown="handleKeydown"
         @paste="handlePaste"
         @drop="handleDrop"
@@ -170,12 +170,12 @@
           <div class="input-field compact">
             <Dropdown
               v-model="modeValue"
-              :placeholder="hasAgentOptions ? 'Select agent' : 'Loading agents...'"
+              :placeholder="hasAgentOptions ? $t('inputPanel.selectAgent') : $t('inputPanel.loadingAgents')"
               :disabled="props.disabled || !hasAgentOptions"
               button-class="input-control input-dropdown-button"
               popup-class="input-dropdown-popup"
               auto-close
-              title="Agent (Tab)"
+              :title="$t('inputPanel.agentTitle')"
               @update:open="handleModelDropdownOpenChange"
             >
               <template #value="{ value: id }">
@@ -183,7 +183,7 @@
               </template>
               <template #default>
                 <div class="dropdown-list">
-                  <div v-if="!hasAgentOptions" class="dropdown-empty">Loading agents...</div>
+                  <div v-if="!hasAgentOptions" class="dropdown-empty">{{ $t('inputPanel.loadingAgents') }}</div>
                   <DropdownItem v-for="agent in agentOptions" :key="agent.id" :value="agent.id">
                     <div class="agent-dropdown-item">
                       <span class="agent-dropdown-name" :style="agentOptionNameStyle(agent)">
@@ -207,12 +207,12 @@
           <div ref="modelDropdownRef" class="input-dropdown-root">
             <Dropdown
               v-model="modelValue"
-              :placeholder="hasModelOptions ? 'Select model' : 'Loading models...'"
+              :placeholder="hasModelOptions ? $t('inputPanel.selectModel') : $t('inputPanel.loadingModels')"
               :disabled="props.disabled || !hasModelOptions"
               button-class="input-control input-dropdown-button"
               popup-class="input-dropdown-popup"
               auto-close
-              title="Model (Ctrl-M)"
+              :title="$t('inputPanel.modelTitle')"
               @update:open="handleModelDropdownOpenChange"
             >
               <template #value="{ value: id }">
@@ -231,12 +231,12 @@
                 <div class="model-picker">
                   <DropdownSearch
                     v-model="modelSearchQuery"
-                    placeholder="Search..."
+                    :placeholder="$t('inputPanel.searchPlaceholder')"
                     class="model-search"
                   />
                   <div class="model-picker-list">
                     <div class="dropdown-list">
-                      <div v-if="!hasModelOptions" class="dropdown-empty">Loading models...</div>
+                      <div v-if="!hasModelOptions" class="dropdown-empty">{{ $t('inputPanel.loadingModels') }}</div>
                       <div
                         v-else-if="filteredGroupedModelOptions.length === 0"
                         class="dropdown-empty"
@@ -271,12 +271,12 @@
         <div class="input-field compact">
           <Dropdown
             v-model="thinkingKeyValue"
-            :placeholder="hasThinkingOptions ? 'Select variant' : 'Loading...'"
+            :placeholder="hasThinkingOptions ? $t('inputPanel.selectVariant') : $t('inputPanel.loading')"
             :disabled="props.disabled || !hasThinkingOptions"
             button-class="input-control input-dropdown-button"
             popup-class="input-dropdown-popup"
             auto-close
-            title="Variant (Ctrl-, / Ctrl-.)"
+              :title="$t('inputPanel.variantTitle')"
             @update:open="handleModelDropdownOpenChange"
           >
             <template #value="{ value: key }">
@@ -284,7 +284,7 @@
             </template>
             <template #default>
               <div class="dropdown-list">
-                <div v-if="!hasThinkingOptions" class="dropdown-empty">Loading...</div>
+                <div v-if="!hasThinkingOptions" class="dropdown-empty">{{ $t('inputPanel.loading') }}</div>
                 <DropdownItem
                   v-for="option in thinkingChoices"
                   :key="option.key"
@@ -301,7 +301,7 @@
             type="button"
             class="input-button suppress-button"
             :class="{ active: suppressAutoWindows }"
-            :title="suppressAutoWindows ? 'Auto windows suppressed' : 'Suppress auto windows'"
+            :title="suppressAutoWindows ? $t('inputPanel.autoWindowsSuppressed') : $t('inputPanel.suppressAutoWindows')"
             @click="suppressAutoWindows = !suppressAutoWindows"
           >
             <Icon
@@ -313,7 +313,7 @@
           <button
             type="button"
             class="input-button bookmark-button"
-            :title="messageValue.trim() ? 'Bookmark current input' : 'Open bookmarks (\u2193)'"
+            :title="messageValue.trim() ? $t('inputPanel.bookmarkCurrentInput') : $t('inputPanel.openBookmarks')"
             @click="messageValue.trim() ? bookmarkCurrentInput() : (favoritesOpen = true)"
           >
             <Icon
@@ -322,14 +322,14 @@
               :height="16"
             />
             <Transition name="bookmark-toast">
-              <span v-if="bookmarkToastVisible" class="bookmark-toast">Bookmarked!</span>
+              <span v-if="bookmarkToastVisible" class="bookmark-toast">{{ $t('inputPanel.bookmarked') }}</span>
             </Transition>
           </button>
           <button
             type="button"
             class="input-button attach-button"
             :disabled="props.disabled || props.canAttach === false"
-            title="Attach"
+            :title="$t('inputPanel.attach')"
             @click="triggerFileInput"
           >
             <Icon icon="lucide:paperclip" :width="16" :height="16" />
@@ -339,7 +339,7 @@
             type="button"
             class="input-button stop send-button"
             :disabled="props.disabled || !canAbort"
-            title="Stop (ESC x2)"
+            :title="$t('inputPanel.stop')"
             @click="$emit('abort')"
           >
             <Icon icon="ph:stop-fill" :width="16" :height="16" />
@@ -362,6 +362,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@iconify/vue';
 import Dropdown from './Dropdown.vue';
 import DropdownItem from './Dropdown/Item.vue';
@@ -381,6 +382,8 @@ type ModelOption = {
 type CommandOption = { name: string; description?: string; hints?: string[] };
 type AgentOption = { id: string; label: string; description?: string; color?: string };
 type ThinkingChoice = { key: string; value: string | undefined; label: string };
+
+const { t } = useI18n();
 
 const props = defineProps<{
   messageInput: string;
@@ -588,7 +591,7 @@ function handleFavoriteSelect(entry: unknown) {
 }
 
 function confirmRemoveFavorite(index: number) {
-  if (!window.confirm('Remove this message from favorites?')) return;
+  if (!window.confirm(t('inputPanel.removeFromFavoritesConfirm'))) return;
   removeFavorite(index);
 }
 
@@ -612,7 +615,7 @@ watch(favoritesOpen, (open) => {
 });
 
 const sendTooltip = computed(() =>
-  enterToSend.value ? 'Ctrl-Enter / Enter to send' : 'Ctrl-Enter to send',
+  enterToSend.value ? t('inputPanel.sendTooltipEnter') : t('inputPanel.sendTooltipCtrlEnter'),
 );
 
 const slashQuery = computed(() => {

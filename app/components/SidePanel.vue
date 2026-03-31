@@ -5,7 +5,7 @@
       type="button"
       class="side-toggle side-toggle-collapsed"
       :aria-expanded="!collapsed"
-      aria-label="Expand side panel"
+      :aria-label="$t('sidePanel.expandPanel')"
       @click="emit('toggle-collapse')"
     >
       <Icon icon="lucide:chevron-right" width="14" height="14" />
@@ -26,7 +26,7 @@
           type="button"
           class="side-toggle side-toggle-inline"
           :aria-expanded="!collapsed"
-          aria-label="Collapse side panel"
+          :aria-label="$t('sidePanel.collapsePanel')"
           @click="emit('toggle-collapse')"
         >
           <Icon icon="lucide:chevron-left" width="14" height="14" />
@@ -35,10 +35,10 @@
       <TodoList v-if="activeTab === 'todo'" :sessions="todoSessions" />
       <div v-else-if="activeTab === 'session'" class="session-body">
         <div class="session-header">
-          <div class="session-title">SESSION</div>
+          <div class="session-title">{{ $t('sidePanel.session.title') }}</div>
           <div class="session-count">{{ pinnedSessions.length }}</div>
         </div>
-        <div v-if="pinnedSessions.length === 0" class="session-empty">No pinned sessions.</div>
+        <div v-if="pinnedSessions.length === 0" class="session-empty">{{ $t('sidePanel.session.noPinned') }}</div>
         <ul v-else class="session-list">
           <li
             v-for="session in pinnedSessions"
@@ -63,7 +63,7 @@
             <button
               type="button"
               class="session-unpin"
-              title="Unpin session"
+              :title="$t('sidePanel.session.unpin')"
               @click="
                 emit('unpin-session', {
                   sessionId: session.sessionId,
@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { toRefs } from 'vue';
+import { computed, toRefs } from 'vue';
 import { Icon } from '@iconify/vue';
 import TodoList from './TodoList.vue';
 import type { BranchEntry } from '../composables/useFileTree';
@@ -171,11 +171,15 @@ const emit = defineEmits<{
   (event: 'reload'): void;
 }>();
 
-const tabs = [
-  { id: 'todo' as const, label: 'TODO' },
-  { id: 'session' as const, label: 'SESSION' },
-  { id: 'tree' as const, label: 'TREE' },
-];
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
+const tabs = computed(() => [
+  { id: 'todo' as const, label: t('sidePanel.tabs.todo') },
+  { id: 'session' as const, label: t('sidePanel.tabs.session') },
+  { id: 'tree' as const, label: t('sidePanel.tabs.tree') },
+]);
 
 const {
   collapsed,

@@ -18,17 +18,17 @@
         {{ contextPercent }}%
       </span>
       <span v-if="tokens" class="ib-meta-item ib-meta-tokens">
-        <span class="ib-token-in" title="Input tokens"
+        <span class="ib-token-in" :title="t('threadFooter.inputTokens')"
           ><Icon icon="lucide:arrow-up" :width="9" :height="9" />{{
             formatTokenCount(tokens.input)
           }}</span
         >
-        <span class="ib-token-out" title="Output tokens"
+        <span class="ib-token-out" :title="t('threadFooter.outputTokens')"
           ><Icon icon="lucide:arrow-down" :width="9" :height="9" />{{
             formatTokenCount(tokens.output)
           }}</span
         >
-        <span class="ib-token-reason" title="Reasoning tokens"
+        <span class="ib-token-reason" :title="t('threadFooter.reasoningTokens')"
           ><Icon icon="lucide:brain" :width="9" :height="9" />{{
             formatTokenCount(tokens.reasoning)
           }}</span
@@ -42,7 +42,7 @@
         class="ib-action ib-action-diff"
         @click="$emit('show-diff')"
       >
-        DIFF
+        {{ t('threadFooter.diff') }}
       </button>
       <button
         v-if="canRevert"
@@ -50,7 +50,7 @@
         class="ib-action ib-action-danger"
         @click="$emit('revert')"
       >
-        REVERT
+        {{ t('threadFooter.revert') }}
       </button>
     </span>
   </div>
@@ -58,8 +58,11 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
+import { useI18n } from 'vue-i18n';
 import type { MessageTokens } from '../types/message';
 import { contextSeverityClass, formatTokenCount } from '../utils/formatters';
+
+const { t } = useI18n();
 
 defineProps<{
   timestamp: string;

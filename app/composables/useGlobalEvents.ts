@@ -4,6 +4,7 @@ import type { TabToWorkerMessage, WorkerToTabMessage } from '../types/sse-worker
 import { createSseConnection } from '../utils/sseConnection';
 import { TypedEmitter } from '../utils/eventEmitter';
 import SseSharedWorker from '../workers/sse-shared-worker?sharedworker';
+import { useI18n } from '../i18n/useI18n';
 
 type EventKey = keyof GlobalEventMap;
 type ConnectOptions = { failFast?: boolean; timeoutMs?: number };
@@ -134,7 +135,11 @@ function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, '');
 }
 
-function createDirectTransport(callbacks: TransportCallbacks): Transport {
+function createDirectTransport(
+  callbacks: TransportCallbacks,
+  translate?: (key: string) => string,
+): Transport {
+  const t = translate ?? ((key: string) => key);
   let connected = false;
   let openResolver: ((value: void) => void) | null = null;
   let openRejector: ((reason: Error) => void) | null = null;
@@ -173,7 +178,7 @@ function createDirectTransport(callbacks: TransportCallbacks): Transport {
       const timer = setTimeout(() => {
         openResolver = null;
         openRejector = null;
-        reject(new Error('SSE connection timed out.'));
+        reject(new Error(t('errors.sseConnectFailed')));
       }, timeoutMs);
       openResolver = () => {
         clearTimeout(timer);
@@ -190,7 +195,7 @@ function createDirectTransport(callbacks: TransportCallbacks): Transport {
     async connect(baseUrl, authorization, options = {}) {
       const normalized = normalizeBaseUrl(baseUrl);
       if (!normalized) {
-        throw new Error('SSE base URL is empty.');
+        throw new Error(t('errors.sseUrlEmpty'));
       }
       connection.connect({ baseUrl: normalized, authorization });
       if (options.failFast) {
@@ -201,7 +206,7 @@ function createDirectTransport(callbacks: TransportCallbacks): Transport {
       connected = false;
       connection.disconnect();
       if (openRejector) {
-        openRejector(new Error('SSE connection aborted.'));
+        openRejector(new Error(t('errors.sseConnectionAborted')));
         openResolver = null;
         openRejector = null;
       }
@@ -212,7 +217,11 @@ function createDirectTransport(callbacks: TransportCallbacks): Transport {
   };
 }
 
-function createSharedWorkerTransport(callbacks: TransportCallbacks): Transport {
+function createSharedWorkerTransport(
+  callbacks: TransportCallbacks,
+  translate?: (key: string) => string,
+): Transport {
+  const t = translate ?? ((key: string) => key);
   let worker: SharedWorker | null = null;
   let connected = false;
   let openResolver: ((value: void) => void) | null = null;
@@ -271,7 +280,7 @@ function createSharedWorkerTransport(callbacks: TransportCallbacks): Transport {
       const timer = setTimeout(() => {
         openResolver = null;
         openRejector = null;
-        reject(new Error('SSE connection timed out.'));
+        reject(new Error(t('errors.sseConnectFailed')));
       }, timeoutMs);
       openResolver = () => {
         clearTimeout(timer);
@@ -288,13 +297,16 @@ function createSharedWorkerTransport(callbacks: TransportCallbacks): Transport {
     async connect(baseUrl, authorization, options = {}) {
       const normalized = normalizeBaseUrl(baseUrl);
       if (!normalized) {
-        throw new Error('SSE base URL is empty.');
+        throw new Error(t('errors.sseUrlEmpty'));
       }
       connected = false;
       const message: TabToWorkerMessage = {
         type: 'connect',
         baseUrl: normalized,
         authorization,
+        errorMessages: {
+          emptyBaseUrl: t('errors.sseUrlEmpty'),
+        },
       };
       ensureWorker().port.postMessage(message);
       if (options.failFast) {
@@ -308,7 +320,7 @@ function createSharedWorkerTransport(callbacks: TransportCallbacks): Transport {
         worker.port.postMessage(message);
       }
       if (openRejector) {
-        openRejector(new Error('SSE connection aborted.'));
+        openRejector(new Error(t('errors.sseConnectionAborted')));
         openResolver = null;
         openRejector = null;
       }
@@ -322,6 +334,7 @@ function createSharedWorkerTransport(callbacks: TransportCallbacks): Transport {
 }
 
 export function useGlobalEvents(credentials: CredentialsBinding) {
+  const { t } = useI18n();
   const emitter = new TypedEmitter<GlobalEventMap>();
   let workerMessageHandler: ((message: WorkerToTabMessage) => boolean) | undefined;
 
@@ -333,22 +346,28 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
 
   const transport =
     typeof SharedWorker !== 'undefined'
-      ? createSharedWorkerTransport({
-          onPacket: routePacket,
-          onOpen: () => emitter.emit('connection.open', {}),
-          onError: (message, statusCode) =>
-            emitter.emit('connection.error', { message, statusCode }),
-          onReconnected: () => emitter.emit('connection.reconnected', {}),
-          onWorkerMessage: (message) => workerMessageHandler?.(message) ?? false,
-        })
-      : createDirectTransport({
-          onPacket: routePacket,
-          onOpen: () => emitter.emit('connection.open', {}),
-          onError: (message, statusCode) =>
-            emitter.emit('connection.error', { message, statusCode }),
-          onReconnected: () => emitter.emit('connection.reconnected', {}),
-          onWorkerMessage: (message) => workerMessageHandler?.(message) ?? false,
-        });
+      ? createSharedWorkerTransport(
+          {
+            onPacket: routePacket,
+            onOpen: () => emitter.emit('connection.open', {}),
+            onError: (message, statusCode) =>
+              emitter.emit('connection.error', { message, statusCode }),
+            onReconnected: () => emitter.emit('connection.reconnected', {}),
+            onWorkerMessage: (message) => workerMessageHandler?.(message) ?? false,
+          },
+          t,
+        )
+      : createDirectTransport(
+          {
+            onPacket: routePacket,
+            onOpen: () => emitter.emit('connection.open', {}),
+            onError: (message, statusCode) =>
+              emitter.emit('connection.error', { message, statusCode }),
+            onReconnected: () => emitter.emit('connection.reconnected', {}),
+            onWorkerMessage: (message) => workerMessageHandler?.(message) ?? false,
+          },
+          t,
+        );
 
   let requested = false;
   let lastKey = '';
@@ -371,7 +390,7 @@ export function useGlobalEvents(credentials: CredentialsBinding) {
 
   async function connect(options: ConnectOptions = {}) {
     const baseUrl = normalizeBaseUrl(credentials.baseUrl.value);
-    if (!baseUrl) throw new Error('SSE base URL is empty.');
+    if (!baseUrl) throw new Error(t('errors.sseUrlEmpty'));
     requested = true;
     lastKey = `${baseUrl}\u0000${credentials.authHeader.value ?? ''}`;
     await transport.connect(baseUrl, credentials.authHeader.value, options);

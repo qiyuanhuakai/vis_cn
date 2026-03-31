@@ -25,12 +25,16 @@ export function formatMessageTime(value?: number): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
-export function formatMessageError(error: { name: string; message: string }): string {
-  if (error.name === 'MessageAbortedError') return error.message || 'Aborted';
+export function formatMessageError(
+  error: { name: string; message: string },
+  t?: (key: string) => string,
+): string {
+  const tFn = t || ((key: string) => key);
+  if (error.name === 'MessageAbortedError') return error.message || tFn('common.aborted');
   const parts: string[] = [];
-  if (error.name) parts.push(error.name);
+  if (error.name) parts.push(error.name === 'Error' ? tFn('common.error') : error.name);
   if (error.message) parts.push(error.message);
-  return parts.join(': ') || 'Error';
+  return parts.join(': ') || tFn('common.error');
 }
 
 export function formatElapsedTime(startMs?: number, endMs?: number): string {

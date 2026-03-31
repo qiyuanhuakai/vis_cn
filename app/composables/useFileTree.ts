@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import type { Ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { FileWatcherUpdatedPacket } from '../types/sse';
 import * as opencodeApi from '../utils/opencode';
 import { usePtyOneshot } from './usePtyOneshot';
@@ -116,6 +117,7 @@ const branchListLoading = ref(false);
 const fileTreeStrategy = ref<FileTreeStrategy>('filesystem');
 
 let fileCacheBuildId = 0;
+let tFunction: ((key: string, params?: Record<string, unknown>) => string) | null = null;
 const DIRECTORY_RELOAD_DEBOUNCE_MS = 120;
 const GIT_STATUS_RELOAD_DEBOUNCE_MS = 120;
 const scheduledDirectoryReloads = new Map<string, ReturnType<typeof setTimeout>>();
@@ -993,7 +995,7 @@ async function rebuildFileCache() {
     } catch (error) {
       if (buildId !== fileCacheBuildId) return;
       if (options.activeDirectory.value.trim() !== directory) return;
-      treeError.value = `Tree load failed: ${toErrorMessage(error)}`;
+      treeError.value = getT()('app.error.treeLoadFailed', { message: toErrorMessage(error) });
     } finally {
       if (buildId === fileCacheBuildId && options.activeDirectory.value.trim() === directory) {
         treeLoading.value = false;
@@ -1045,7 +1047,7 @@ async function rebuildFileCache() {
   } catch (error) {
     if (buildId !== fileCacheBuildId) return;
     if (options.activeDirectory.value.trim() !== directory) return;
-    treeError.value = `Tree load failed: ${toErrorMessage(error)}`;
+    treeError.value = getT()('app.error.treeLoadFailed', { message: toErrorMessage(error) });
   } finally {
     if (buildId === fileCacheBuildId && options.activeDirectory.value.trim() === directory) {
       treeLoading.value = false;
@@ -1090,11 +1092,29 @@ function initializeFileTree(options: UseFileTreeOptions) {
   );
 }
 
+function getT() {
+  if (!tFunction) {
+    return (key: string, params?: Record<string, unknown>) => {
+      const lastPart = key.split('.').pop() || key;
+      if (params) {
+        return Object.entries(params).reduce((acc, [k, v]) => {
+          return acc.replace(`{${k}}`, String(v));
+        }, lastPart);
+      }
+      return lastPart;
+    };
+  }
+  return tFunction;
+}
+
 export function useFileTree(options?: UseFileTreeOptions) {
   if (options) initializeFileTree(options);
   if (!boundOptions) {
     throw new Error('useFileTree is not initialized');
   }
+
+  const { t } = useI18n();
+  tFunction = t;
 
   return {
     treeNodes,

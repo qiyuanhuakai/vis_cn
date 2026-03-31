@@ -21,7 +21,7 @@
       >
         <template #trigger>
           <header class="modal-header">
-            <span class="modal-title">Open project</span>
+            <span class="modal-title">{{ $t('projectPicker.title') }}</span>
             <button type="button" class="modal-close-button" @click="handleClose">
               <Icon icon="lucide:x" :width="14" :height="14" />
             </button>
@@ -32,12 +32,12 @@
               :value="rawInput"
               class="path-input"
               type="text"
-              placeholder="Directory path..."
+              :placeholder="$t('projectPicker.placeholder')"
               @input="handleInput"
               @keydown="handleInputKeydown"
             />
             <button type="button" class="open-button" :disabled="!canOpen" @click="handleOpen">
-              Open
+              {{ $t('projectPicker.open') }}
             </button>
           </div>
           <div v-if="error" class="error-text">{{ error }}</div>
@@ -54,7 +54,7 @@
           {{ item.name }}/
         </DropdownItem>
         <div v-if="!isLoading && suggestions.length === 0 && currentDir" class="picker-empty">
-          {{ parsed.filter ? 'No matches' : 'No subdirectories' }}
+          {{ parsed.filter ? $t('projectPicker.noMatches') : $t('projectPicker.noSubdirectories') }}
         </div>
       </Dropdown>
     </div>

@@ -4,6 +4,7 @@ export function waitForState<T>(
   source: () => T,
   predicate: (value: T) => boolean,
   timeoutMs = 30_000,
+  timeoutMessage?: string,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const current = source();
@@ -18,7 +19,7 @@ export function waitForState<T>(
       if (done) return;
       done = true;
       stop();
-      reject(new Error('Timed out waiting for state update.'));
+      reject(new Error(timeoutMessage ?? 'Timed out waiting for state update.'));
     }, timeoutMs);
 
     stop = watch(

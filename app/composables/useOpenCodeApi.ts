@@ -3,6 +3,8 @@ import * as opencodeApi from '../utils/opencode';
 import { waitForState } from '../utils/waitForState';
 import type { ProjectState, SessionState } from '../types/worker-state';
 
+type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
+
 type ProjectsMap = Record<string, ProjectState>;
 
 type SessionInfo = {
@@ -71,7 +73,11 @@ function hasSandbox(project: ProjectState | undefined, directory: string): boole
   return Boolean(project.sandboxes[directory]);
 }
 
-export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
+export function useOpenCodeApi(
+  projects: ProjectsMap | Ref<ProjectsMap>,
+  translate?: TranslateFn,
+) {
+  const t = translate ?? ((key: string) => key);
   const pendingCount = ref(0);
   const pending = computed(() => pendingCount.value > 0);
 
@@ -87,7 +93,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
         return;
       } catch {
         window.location.reload();
-        throw new Error('State synchronization failed after retry. Reload requested.');
+        throw new Error(t('errors.stateSyncFailed'));
       }
     }
   }
@@ -104,7 +110,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
   function requireProjectId(projectId: string): string {
     const normalized = normalizeId(projectId);
     if (!normalized) {
-      throw new Error('Project ID is required for SSE-confirmed operations.');
+      throw new Error(t('errors.projectIdRequired'));
     }
     return normalized;
   }
@@ -113,11 +119,11 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
     return withPending(async () => {
       const session = (await opencodeApi.createSession(directory)) as SessionInfo;
       if (!session?.id) {
-        throw new Error('Session create failed: invalid response.');
+        throw new Error(t('errors.sessionCreateInvalidResponse'));
       }
       const effectiveProjectId = normalizeId(session.projectID);
       if (!effectiveProjectId) {
-        throw new Error('Session create failed: missing projectID.');
+        throw new Error(t('errors.sessionCreateMissingProjectId'));
       }
       const sessionId = normalizeId(session.id);
       await waitWithRetry((state) => Boolean(findSession(state[effectiveProjectId], sessionId)));
@@ -138,11 +144,11 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
         payload.directory,
       )) as SessionInfo;
       if (!session?.id) {
-        throw new Error('Session fork failed: invalid response.');
+        throw new Error(t('errors.sessionForkInvalidResponse'));
       }
       const effectiveProjectId = normalizeId(session.projectID);
       if (!effectiveProjectId) {
-        throw new Error('Session fork failed: missing projectID.');
+        throw new Error(t('errors.sessionForkMissingProjectId'));
       }
       await waitWithRetry((state) => Boolean(findSession(state[effectiveProjectId], session.id)));
       return session;
@@ -164,7 +170,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
         payload.directory,
       )) as SessionInfo;
       if (!session?.id) {
-        throw new Error('Session archive failed: invalid response.');
+        throw new Error(t('errors.sessionArchiveInvalidResponse'));
       }
       await waitWithRetry((state) => {
         const current = findSession(state[projectId], payload.sessionId);
@@ -189,7 +195,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
         payload.directory,
       )) as SessionInfo;
       if (!session?.id) {
-        throw new Error('Session unarchive failed: invalid response.');
+        throw new Error(t('errors.sessionUnarchiveInvalidResponse'));
       }
       await waitWithRetry((state) => {
         const current = findSession(state[projectId], payload.sessionId);
@@ -214,7 +220,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
         payload.directory,
       )) as SessionInfo;
       if (!session?.id) {
-        throw new Error('Session pin failed: invalid response.');
+        throw new Error(t('errors.sessionPinInvalidResponse'));
       }
       await waitWithRetry((state) => {
         const current = findSession(state[projectId], payload.sessionId);
@@ -237,7 +243,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
         payload.directory,
       )) as SessionInfo;
       if (!session?.id) {
-        throw new Error('Session unpin failed: invalid response.');
+        throw new Error(t('errors.sessionUnpinInvalidResponse'));
       }
       await waitWithRetry((state) => {
         const current = findSession(state[projectId], payload.sessionId);
@@ -314,7 +320,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
       const data = (await opencodeApi.createWorktree(payload.directory)) as CreateWorktreeInfo;
       const createdDir = data?.directory?.trim();
       if (!createdDir) {
-        throw new Error('Worktree create failed: invalid response.');
+        throw new Error(t('errors.worktreeCreateInvalidResponse'));
       }
       await waitWithRetry((state) => hasSandbox(state[projectId], createdDir));
       return data;
@@ -362,7 +368,7 @@ export function useOpenCodeApi(projects: ProjectsMap | Ref<ProjectsMap>) {
 
       const created = (await opencodeApi.createSession(directory)) as SessionInfo;
       if (!created?.id) {
-        throw new Error('Session create failed: invalid response.');
+        throw new Error(t('errors.sessionCreateInvalidResponse'));
       }
       return {
         projectId: created.projectID,

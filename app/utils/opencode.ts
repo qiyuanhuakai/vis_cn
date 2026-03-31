@@ -17,9 +17,9 @@ export function setAuthorization(authorization: string | undefined) {
   configuredAuthorization = authorization;
 }
 
-function getBaseUrlOrThrow() {
+function getBaseUrlOrThrow(errorMessage?: string) {
   if (!configuredBaseUrl) {
-    throw new Error('OpenCode base URL is not configured.');
+    throw new Error(errorMessage ?? 'OpenCode base URL is not configured.');
   }
   return configuredBaseUrl;
 }

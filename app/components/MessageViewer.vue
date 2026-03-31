@@ -18,8 +18,11 @@
 
 <script setup lang="ts">
 import { computed, ref, useAttrs, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import CodeRenderer from './renderers/CodeRenderer.vue';
 import MarkdownRenderer from './renderers/MarkdownRenderer.vue';
+
+const { t } = useI18n();
 
 type MessageMode = 'auto' | 'markdown' | 'code';
 type ActiveMode = 'markdown' | 'code';
@@ -43,19 +46,19 @@ const attrs = useAttrs();
 const activeMode = ref<ActiveMode>('markdown');
 
 const availableModes = computed<Array<{ id: ActiveMode; label: string }>>(() => {
-  if (props.html != null) return [{ id: 'markdown', label: 'Rendered' }];
-  if (props.mode === 'markdown') return [{ id: 'markdown', label: 'Rendered' }];
-  if (props.mode === 'code') return [{ id: 'code', label: 'Source' }];
+  if (props.html != null) return [{ id: 'markdown', label: t('messageViewer.rendered') }];
+  if (props.mode === 'markdown') return [{ id: 'markdown', label: t('messageViewer.rendered') }];
+  if (props.mode === 'code') return [{ id: 'code', label: t('messageViewer.source') }];
   if (props.lang === 'markdown') {
     if (props.allowModeToggle) {
       return [
-        { id: 'markdown', label: 'Rendered' },
-        { id: 'code', label: 'Source' },
+        { id: 'markdown', label: t('messageViewer.rendered') },
+        { id: 'code', label: t('messageViewer.source') },
       ];
     }
-    return [{ id: 'markdown', label: 'Rendered' }];
+    return [{ id: 'markdown', label: t('messageViewer.rendered') }];
   }
-  return [{ id: 'code', label: 'Source' }];
+  return [{ id: 'code', label: t('messageViewer.source') }];
 });
 
 watch(

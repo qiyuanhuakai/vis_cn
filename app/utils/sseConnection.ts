@@ -3,6 +3,12 @@ import type { SsePacket } from '../types/sse';
 export type SseConnectionOptions = {
   baseUrl: string;
   authorization?: string;
+  errorMessages?: {
+    emptyBaseUrl?: string;
+    authenticationFailed?: string;
+    streamClosed?: string;
+    httpError?: (status: number) => string;
+  };
 };
 
 export type SseConnectionConnectOptions = {
@@ -108,7 +114,7 @@ export function createSseConnection(callbacks: SseConnectionCallbacks): SseConne
         return;
       }
 
-      callbacks.onError('SSE stream closed.');
+      callbacks.onError(target?.errorMessages?.streamClosed ?? 'SSE stream closed.');
       abortController = undefined;
       connected = false;
       scheduleReconnect();
@@ -136,7 +142,7 @@ export function createSseConnection(callbacks: SseConnectionCallbacks): SseConne
         if (response.status === 401) {
           abortController = undefined;
           connected = false;
-          callbacks.onError('Authentication failed.', 401);
+          callbacks.onError(target?.errorMessages?.authenticationFailed ?? 'Authentication failed.', 401);
           return;
         }
 
@@ -171,7 +177,7 @@ export function createSseConnection(callbacks: SseConnectionCallbacks): SseConne
       authorization: options.authorization,
     };
     if (!normalized.baseUrl) {
-      callbacks.onError('SSE base URL is empty.');
+      callbacks.onError(normalized.errorMessages?.emptyBaseUrl ?? 'SSE base URL is empty.');
       return;
     }
 

@@ -53,9 +53,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { guessLanguageFromPath } from '../ToolWindow/utils';
 import DiffRenderer from '../renderers/DiffRenderer.vue';
 import ContentViewer from './ContentViewer.vue';
+
+const { t } = useI18n();
 
 type PrimaryMode = 'original' | 'modified' | 'diff';
 
@@ -115,17 +118,17 @@ const isBitmapFile = computed(() => {
 });
 
 const primaryModes = computed<Array<{ id: PrimaryMode; label: string }>>(() => {
-  if (!hasBeforeAfter.value) return [{ id: 'diff', label: 'Diff' }];
+  if (!hasBeforeAfter.value) return [{ id: 'diff', label: t('viewers.diff.diff') }];
   if (isBitmapFile.value) {
     return [
-      { id: 'modified', label: 'Modified' },
-      { id: 'original', label: 'Original' },
+      { id: 'modified', label: t('viewers.diff.modified') },
+      { id: 'original', label: t('viewers.diff.original') },
     ];
   }
   return [
-    { id: 'original', label: 'Original' },
-    { id: 'modified', label: 'Modified' },
-    { id: 'diff', label: 'Diff' },
+    { id: 'original', label: t('viewers.diff.original') },
+    { id: 'modified', label: t('viewers.diff.modified') },
+    { id: 'diff', label: t('viewers.diff.diff') },
   ];
 });
 

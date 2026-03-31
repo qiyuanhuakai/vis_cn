@@ -8,7 +8,7 @@
   >
     <div class="modal">
       <header class="modal-header">
-        <div class="modal-title">Settings</div>
+        <div class="modal-title">{{ $t('settings.title') }}</div>
         <button type="button" class="modal-close-button" @click="dialogRef?.close()">
           <Icon icon="lucide:x" :width="14" :height="14" />
         </button>
@@ -16,10 +16,19 @@
       <div class="modal-body">
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-label">Enter to send</div>
-            <div class="setting-description">
-              Send messages by pressing Enter. When off, use Ctrl+Enter.
-            </div>
+            <div class="setting-label">{{ $t('settings.language.label') }}</div>
+            <div class="setting-description">{{ $t('settings.language.description') }}</div>
+          </div>
+          <select v-model="locale" class="language-select">
+            <option value="en">{{ $t('settings.language.en') }}</option>
+            <option value="zh-CN">{{ $t('settings.language.zhCN') }}</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">{{ $t('settings.enterToSend.label') }}</div>
+            <div class="setting-description">{{ $t('settings.enterToSend.description') }}</div>
           </div>
           <label class="toggle-switch">
             <input v-model="enterToSend" type="checkbox" class="toggle-input" />
@@ -29,11 +38,8 @@
 
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-label">Show minimize button</div>
-            <div class="setting-description">
-              Toggle window minimization controls. Turning this off also restores all minimized
-              windows.
-            </div>
+            <div class="setting-label">{{ $t('settings.showMinimizeButtons.label') }}</div>
+            <div class="setting-description">{{ $t('settings.showMinimizeButtons.description') }}</div>
           </div>
           <label class="toggle-switch">
             <input v-model="showMinimizeButtons" type="checkbox" class="toggle-input" />
@@ -43,11 +49,8 @@
 
         <div class="setting-row setting-row-stack">
           <div class="setting-info">
-            <div class="setting-label">Pinned sessions limit</div>
-            <div class="setting-description">
-              Keep at most {{ maxPinnedSessionsLimit }} local pinned sessions; oldest pins are dropped
-              first.
-            </div>
+            <div class="setting-label">{{ $t('settings.pinnedSessionsLimit.label') }}</div>
+            <div class="setting-description">{{ $t('settings.pinnedSessionsLimit.description', { limit: maxPinnedSessionsLimit }) }}</div>
           </div>
           <div class="number-setting-group">
             <input
@@ -69,6 +72,8 @@
 import { ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useSettings } from '../composables/useSettings';
+import { getLocale, setLocale } from '../i18n';
+import type { Locale } from '../i18n/types';
 
 const props = defineProps<{
   open: boolean;
@@ -86,6 +91,11 @@ const {
   minPinnedSessionsLimit,
   maxPinnedSessionsLimit,
 } = useSettings();
+
+const locale = ref<Locale>(getLocale());
+watch(locale, (newLocale) => {
+  setLocale(newLocale);
+});
 
 watch(
   () => props.open,
@@ -243,6 +253,24 @@ watch(
 
 .number-input {
   -moz-appearance: textfield;
+}
+
+.language-select {
+  height: 30px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.6);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.language-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
 }
 
 

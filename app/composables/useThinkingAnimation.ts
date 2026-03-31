@@ -3,17 +3,21 @@ import type { Ref } from 'vue';
 
 const THINKING_FRAMES = ['', '.', '..', '...'];
 
-export function useThinkingAnimation(isThinking: Ref<boolean>, busyDescendantCount: Ref<number>) {
+export function useThinkingAnimation(
+  isThinking: Ref<boolean>,
+  busyDescendantCount: Ref<number>,
+  t: (key: string) => string,
+) {
   const thinkingIndex = ref(0);
   const thinkingSuffix = ref('');
   let thinkingTimer: number | undefined;
 
   const thinkingDisplayText = computed(() => {
-    if (!isThinking.value) return '🟢 Idle';
+    if (!isThinking.value) return `🟢 ${t('app.status.idle')}`;
     const descendants = busyDescendantCount.value;
     const total = Math.max(1, 1 + descendants);
     const heads = '🤔'.repeat(Math.min(total, 8));
-    return `${heads} Thinking${thinkingSuffix.value}`;
+    return `${heads} ${t('app.status.thinking')}${thinkingSuffix.value}`;
   });
 
   watch(

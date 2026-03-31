@@ -3,7 +3,7 @@
     <div class="top-row">
       <div class="top-left flex items-center gap-2" :title="gitRevision">
         <img width="48px" height="24px" src="/logo.svg" class="" />
-        <div class="font-normal hidden lg:block relative top-0.5">{{ $t('topPanel.title') }}</div>
+        <div class="font-normal hidden lg:block relative top-0.5">OpenCode Visualizer</div>
       </div>
       <div class="top-center">
         <button
@@ -12,8 +12,8 @@
           :class="{ 'has-notifications': notifications.length > 0 }"
           :title="
             notifications.length > 0
-              ? $t('topPanel.pendingNotifications', { count: totalNotificationCount })
-              : $t('topPanel.noNotifications')
+              ? `${totalNotificationCount} pending notifications (Ctrl-G x2)`
+              : 'No notifications'
           "
           :disabled="notifications.length === 0"
           @click="$emit('select-notification')"
@@ -31,8 +31,8 @@
           v-model:open="treeDropdownOpen"
           class="tree-dropdown-root"
           :label="dropdownLabel"
-          :placeholder="$t('topPanel.selectSession')"
-          :title="$t('topPanel.selectSession') + ' (Ctrl-G)'"
+          placeholder="Select session"
+          title="Select session (Ctrl-G)"
           :auto-close="!managementMode"
           :popup-style="{ minWidth: '420px', width: 'min(680px, 90vw)', maxWidth: '90vw' }"
           popup-class="max-lg:left-0! max-lg:w-screen! max-lg:min-w-0! max-lg:max-w-none!"
@@ -49,13 +49,13 @@
                 {{ selectedDisplay.branch }}
               </span>
             </span>
-            <span v-else class="selected-title">{{ $t('topPanel.selectSession') }}</span>
+            <span v-else class="selected-title">Select session</span>
           </template>
           <template #default="{ close }">
             <div class="tree-menu">
               <DropdownSearch
                 v-model="searchQuery"
-                :placeholder="$t('topPanel.searchPlaceholder')"
+                placeholder="Search sessions, branches, directories..."
                 class="tree-search"
               >
                 <template #before>
@@ -76,8 +76,8 @@
               <div v-if="managementMode" class="management-toolbar">
                 <div class="management-title">
                   <Icon icon="lucide:check-check" :width="14" :height="14" />
-                  <span>{{ $t('topPanel.management.title') }}</span>
-                  <span class="management-count">{{ $t('topPanel.management.selectedCount', { count: selectedCount }) }}</span>
+                  <span>Management</span>
+                  <span class="management-count">{{ selectedCount }} selected</span>
                 </div>
                 <div class="management-actions">
                   <button
@@ -85,7 +85,7 @@
                     class="management-action"
                     @click.stop="toggleManagementMode"
                   >
-                    {{ $t('topPanel.management.done') }}
+                    Done
                   </button>
                   <button
                     type="button"
@@ -93,7 +93,7 @@
                     :disabled="visibleSessionKeys.length === 0"
                     @click.stop="toggleSelectAllVisible"
                   >
-                    {{ $t(allVisibleSelected ? 'topPanel.management.unselectVisible' : 'topPanel.management.selectVisible') }}
+                    {{ allVisibleSelected ? 'Unselect visible' : 'Select visible' }}
                   </button>
                   <button
                     type="button"
@@ -101,7 +101,7 @@
                     :disabled="selectedCount === 0"
                     @click.stop="clearManagedSessions"
                   >
-                    {{ $t('topPanel.management.clear') }}
+                    Clear
                   </button>
                   <button
                     type="button"
@@ -109,7 +109,7 @@
                     :disabled="batchPinTargets.length === 0"
                     @click.stop="emitBatchSessionAction('pin')"
                   >
-                    {{ $t('topPanel.management.pin') }} · {{ batchPinTargets.length }}
+                    Pin · {{ batchPinTargets.length }}
                   </button>
                   <button
                     type="button"
@@ -117,7 +117,7 @@
                     :disabled="batchUnpinTargets.length === 0"
                     @click.stop="emitBatchSessionAction('unpin')"
                   >
-                    {{ $t('topPanel.management.unpin') }} · {{ batchUnpinTargets.length }}
+                    Unpin · {{ batchUnpinTargets.length }}
                   </button>
                   <button
                     type="button"
@@ -125,7 +125,7 @@
                     :disabled="batchArchiveTargets.length === 0"
                     @click.stop="emitBatchSessionAction('archive')"
                   >
-                    {{ $t('topPanel.management.archive') }} · {{ batchArchiveTargets.length }}
+                    Archive · {{ batchArchiveTargets.length }}
                   </button>
                   <button
                     type="button"
@@ -133,7 +133,7 @@
                     :disabled="batchUnarchiveTargets.length === 0"
                     @click.stop="emitBatchSessionAction('unarchive')"
                   >
-                    {{ $t('topPanel.management.unarchive') }} · {{ batchUnarchiveTargets.length }}
+                    Unarchive · {{ batchUnarchiveTargets.length }}
                   </button>
                   <button
                     type="button"
@@ -141,14 +141,14 @@
                     :disabled="batchDeleteTargets.length === 0"
                     @click.stop="emitBatchSessionAction('delete')"
                   >
-                    {{ $t('topPanel.management.delete') }} · {{ batchDeleteTargets.length }}
+                    Delete · {{ batchDeleteTargets.length }}
                   </button>
                 </div>
               </div>
 
               <div class="tree-content">
                 <div v-if="displayedTree.length === 0" class="tree-empty">
-                  {{ searchQuery ? $t('topPanel.empty.noMatchingSessions') : $t('topPanel.empty.noWorktrees') }}
+                  {{ searchQuery ? 'No matching sessions' : 'No worktrees' }}
                 </div>
 
                 <div
@@ -176,7 +176,7 @@
                       v-if="worktree.projectId && worktree.projectId !== 'global'"
                       type="button"
                       class="tree-action-button worktree-settings"
-                      :title="$t('topPanel.projectSettings')"
+                      title="Project settings"
                       @click.stop="
                         $emit('edit-project', {
                           projectId: worktree.projectId,
@@ -214,7 +214,7 @@
                         <button
                           type="button"
                           class="tree-action-button new-session"
-                          :title="$t('topPanel.newSession')"
+                          title="New session"
                           @click.stop="
                             handleCreateSessionIn(worktree.directory, sandbox.directory, close)
                           "
@@ -225,7 +225,7 @@
                           v-if="worktree.projectId !== 'global'"
                           type="button"
                           class="tree-action-button fork"
-                          :title="$t('topPanel.createSandbox')"
+                          title="Create a new sandbox"
                           @click.stop="handleCreateWorktree(sandbox.directory, close)"
                         >
                           <Icon icon="lucide:git-branch-plus" :width="16" :height="16" />
@@ -269,9 +269,9 @@
                               <span class="session-title">{{
                                 session.title || session.slug || session.id
                               }}</span>
-                              <span v-if="session.pinnedAt" class="session-badge-pinned">{{ $t('topPanel.badges.pinned') }}</span>
+                              <span v-if="session.pinnedAt" class="session-badge-pinned">pinned</span>
                               <span v-if="session.archivedAt" class="session-badge-archived"
-                                >{{ $t('topPanel.badges.archived') }}</span
+                                >archived</span
                               >
                             </div>
                             <span
@@ -287,7 +287,7 @@
                           type="button"
                           class="tree-action-button session-pin"
                           :class="session.pinnedAt ? 'pinned' : 'pin'"
-                          :title="session.pinnedAt ? $t('topPanel.sessionActions.unpin') : $t('topPanel.sessionActions.pin')"
+                          :title="session.pinnedAt ? 'Unpin session' : 'Pin session to side panel'"
                           @click.stop.prevent="handleSessionPinToggle(session.id, session.pinnedAt)"
                         >
                           <Icon
@@ -300,7 +300,7 @@
                           v-else
                           type="button"
                           class="tree-action-button session-unarchive"
-                          :title="$t('topPanel.sessionActions.unarchive')"
+                          title="Unarchive session"
                           @click.stop.prevent="handleSessionUnarchive(session.id)"
                         >
                           <Icon icon="lucide:archive-restore" :width="16" :height="16" />
@@ -312,8 +312,8 @@
                           :class="isShiftPressed ? 'danger' : 'archive'"
                           :title="
                             isShiftPressed
-                              ? $t('topPanel.sessionActions.deletePermanently')
-                              : $t('topPanel.sessionActions.archive')
+                              ? 'Delete session permanently'
+                              : 'Archive session (with Shift key to delete permanently)'
                           "
                           @click.stop.prevent="handleSessionAction(session.id, close)"
                         >
@@ -349,8 +349,8 @@
                           }"
                           :title="
                             isManagedSessionSelected(worktree.projectId, sandbox.directory, session.id)
-                              ? $t('topPanel.sessionActions.unselect')
-                              : $t('topPanel.sessionActions.select')
+                              ? 'Unselect session'
+                              : 'Select session'
                           "
                           @click.stop="
                             toggleManagedSession(worktree.projectId, sandbox.directory, session.id)
@@ -375,9 +375,9 @@
                               <span class="session-title">{{
                                 session.title || session.slug || session.id
                               }}</span>
-                              <span v-if="session.pinnedAt" class="session-badge-pinned">{{ $t('topPanel.badges.pinned') }}</span>
+                              <span v-if="session.pinnedAt" class="session-badge-pinned">pinned</span>
                               <span v-if="session.archivedAt" class="session-badge-archived"
-                                >{{ $t('topPanel.badges.archived') }}</span
+                                >archived</span
                               >
                             </div>
                             <span
@@ -401,7 +401,7 @@
                   @click="handleOpenDirectory(close)"
                 >
                   <Icon icon="lucide:folder-open" :width="14" :height="14" />
-                  {{ $t('topPanel.openProject') }}
+                  Open project…
                 </button>
               </div>
             </div>
@@ -413,7 +413,7 @@
           class="control-button new-session-button"
           :disabled="!selectedSessionId"
           @click="$emit('new-session')"
-          :title="$t('topPanel.newSessionShortcut')"
+          title="New session (Ctrl-;)"
         >
           <Icon icon="lucide:message-circle-plus" :width="16" :height="16" />
         </button>
@@ -422,7 +422,7 @@
           class="control-button open-shell-button"
           :disabled="!activeDirectory"
           @click="$emit('open-shell')"
-          :title="$t('topPanel.openShell')"
+          title="Open shell"
         >
           <Icon icon="lucide:terminal" :width="16" :height="16" />
         </button>
@@ -430,7 +430,7 @@
           type="button"
           class="control-button management-toggle-button"
           :class="{ 'is-active': managementMode }"
-          :title="managementMode ? $t('topPanel.managementMode.exit') : $t('topPanel.managementMode.enter')"
+          :title="managementMode ? 'Exit management mode' : 'Enter management mode'"
           @pointerdown.stop.prevent
           @click.stop="toggleManagementMode"
         >
@@ -447,7 +447,7 @@
           target="_blank"
           rel="noopener noreferrer"
           class="control-button github-button"
-          :title="$t('topPanel.github')"
+          title="GitHub"
         >
           <Icon icon="lucide:github" :width="16" :height="16" />
         </a>
@@ -469,13 +469,13 @@
           <DropdownItem value="settings">
             <span class="menu-item-content">
               <Icon icon="lucide:settings" :width="14" :height="14" />
-              {{ $t('topPanel.settings') }}
+              Settings
             </span>
           </DropdownItem>
           <DropdownItem value="logout">
             <span class="menu-item-content">
               <Icon icon="lucide:log-out" :width="14" :height="14" />
-              {{ $t('topPanel.logout') }}
+              Logout
             </span>
           </DropdownItem>
         </Dropdown>
@@ -487,14 +487,12 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useI18n } from 'vue-i18n';
 import Dropdown from './Dropdown.vue';
 import DropdownItem from './Dropdown/Item.vue';
 import DropdownSearch from './Dropdown/Search.vue';
 
 declare const __GIT_REVISION__: string;
 const gitRevision = typeof __GIT_REVISION__ !== 'undefined' ? __GIT_REVISION__ : 'dev';
-const { t } = useI18n();
 
 export type TopPanelSession = {
   id: string;
@@ -741,7 +739,7 @@ const selectedDisplay = computed(() => {
 });
 
 const dropdownLabel = computed(() => {
-  if (!selectedDisplay.value) return t('topPanel.selectSession');
+  if (!selectedDisplay.value) return 'Select session';
   return `${selectedDisplay.value.branch} / ${selectedDisplay.value.title}`;
 });
 
@@ -861,10 +859,10 @@ function formatSessionMetaTime(session: TopPanelSession) {
   const created = session.timeCreated ? formatSessionTime(session.timeCreated) : undefined;
   const updated = session.timeUpdated ? formatSessionTime(session.timeUpdated) : undefined;
   if (created && updated) {
-    return `${t('topPanel.meta.created')}: ${created} / ${t('topPanel.meta.updated')}: ${updated}`;
+    return `Created: ${created} / Updated: ${updated}`;
   }
-  if (created) return `${t('topPanel.meta.created')}: ${created}`;
-  if (updated) return `${t('topPanel.meta.updated')}: ${updated}`;
+  if (created) return `Created: ${created}`;
+  if (updated) return `Updated: ${updated}`;
   return '';
 }
 
@@ -905,7 +903,7 @@ function handleCreateWorktree(worktree: string, close: () => void) {
 
 function handleSandboxDelete(directory: string, close?: () => void) {
   if (typeof window !== 'undefined') {
-    const confirmed = window.confirm(t('topPanel.confirm.deleteWorktree', { directory }));
+    const confirmed = window.confirm(`Delete worktree "${directory}"?`);
     if (!confirmed) return;
   }
   emit('delete-active-directory', directory);
@@ -914,7 +912,7 @@ function handleSandboxDelete(directory: string, close?: () => void) {
 
 function handleSessionDelete(sessionId: string, close?: () => void) {
   if (typeof window !== 'undefined') {
-    const confirmed = window.confirm(t('topPanel.confirm.deleteSession'));
+    const confirmed = window.confirm('Delete session?');
     if (!confirmed) return;
   }
   emit('delete-session', sessionId);
@@ -990,7 +988,7 @@ function emitBatchSessionAction(action: TopPanelBatchSessionActionPayload['actio
   if (sessions.length === 0) return;
 
   if (action === 'delete' && typeof window !== 'undefined') {
-    const confirmed = window.confirm(t('topPanel.confirm.deleteSessions', { count: sessions.length }));
+    const confirmed = window.confirm(`Delete ${sessions.length} selected session(s)?`);
     if (!confirmed) return;
   }
 

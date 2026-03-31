@@ -2,6 +2,7 @@ import { reactive, watchEffect } from 'vue';
 import type { Ref } from 'vue';
 import type { MessageInfo } from '../types/sse';
 import { renderWorkerHtml } from '../utils/workerRenderer';
+import { useI18n } from '../i18n/useI18n';
 
 type UseAssistantPreRendererOptions = {
   visibleRoots: Ref<MessageInfo[]>;
@@ -17,6 +18,7 @@ type UseAssistantPreRendererOptions = {
 };
 
 export function useAssistantPreRenderer(options: UseAssistantPreRendererOptions) {
+  const { t } = useI18n();
   const assistantHtmlCache = reactive(new Map<string, string>());
   const deferredKeyCache = reactive(new Map<string, string>());
 
@@ -39,6 +41,10 @@ export function useAssistantPreRenderer(options: UseAssistantPreRendererOptions)
       theme: options.theme.value,
       gutterMode: 'none',
       files: options.filesWithBasenames.value,
+      copyButtonLabel: t('render.copyCode'),
+      copiedLabel: t('render.copied'),
+      copyCodeAriaLabel: t('render.copyCodeAria'),
+      copyMarkdownAriaLabel: t('render.copyMarkdownAria'),
     }).then((html) => {
       const applied = appliedSeqMap.get(rootId) ?? 0;
       if (seq <= applied) return;

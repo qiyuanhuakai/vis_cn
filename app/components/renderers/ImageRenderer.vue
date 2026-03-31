@@ -19,12 +19,15 @@
         @load="handleLoad"
       />
     </div>
-    <div v-if="error" class="error-message">Failed to load image</div>
+    <div v-if="error" class="error-message">{{ t('imageViewer.failedToLoad') }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 defineProps<{
   src: string;

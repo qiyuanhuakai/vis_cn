@@ -1,15 +1,15 @@
 <template>
   <div class="todo-body">
     <div class="todo-header">
-      <div class="todo-title">TODO</div>
+      <div class="todo-title">{{ t('sidePanel.todo.title') }}</div>
       <div class="todo-count">{{ totalCount }}</div>
     </div>
-    <div v-if="sessions.length === 0" class="todo-empty">No todos yet.</div>
+      <div v-if="sessions.length === 0" class="todo-empty">{{ t('sidePanel.todo.empty') }}</div>
     <div v-else class="todo-groups">
       <section v-for="session in sessions" :key="session.sessionId" class="todo-group">
         <header class="todo-group-header">
           <span class="todo-group-title">{{ session.title }}</span>
-          <span v-if="session.isSubagent" class="todo-badge">subagent</span>
+          <span v-if="session.isSubagent" class="todo-badge">{{ t('common.subagent') }}</span>
         </header>
         <div v-if="session.error" class="todo-error">{{ session.error }}</div>
         <ul v-else class="todo-list">
@@ -19,9 +19,9 @@
             class="todo-item"
             :class="`is-${todo.status}`"
           >
-            <span class="todo-status" :title="todo.status">{{ statusIcon(todo.status) }}</span>
+            <span class="todo-status" :title="statusLabel(todo.status)">{{ statusIcon(todo.status) }}</span>
             <span class="todo-text">{{ todo.content }}</span>
-            <span class="todo-priority" :class="`is-${todo.priority}`">{{ todo.priority }}</span>
+            <span class="todo-priority" :class="`is-${todo.priority}`">{{ priorityLabel(todo.priority) }}</span>
           </li>
         </ul>
       </section>
@@ -31,6 +31,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 type TodoEntry = {
   content: string;
@@ -60,6 +63,15 @@ function statusIcon(status: string) {
   if (status === 'in_progress') return '◐';
   if (status === 'cancelled') return '✕';
   return '○';
+}
+
+function statusLabel(status: string): string {
+  const key = status === 'in_progress' ? 'inProgress' : status;
+  return t(`todoStatus.${key}`, status);
+}
+
+function priorityLabel(priority: string): string {
+  return t(`todoPriority.${priority}`, priority);
 }
 </script>
 

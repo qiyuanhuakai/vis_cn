@@ -1,7 +1,7 @@
 <template>
   <div class="code-renderer-content">
     <div ref="viewerBodyEl" class="viewer-body">
-      <div v-if="showLoading" class="viewer-loading">Loading...</div>
+      <div v-if="showLoading" class="viewer-loading">{{ t('common.loading') }}</div>
       <CodeContent v-else :html="renderedHtml || rawHtml || ''" :variant="viewerVariant" />
     </div>
   </div>
@@ -9,8 +9,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import CodeContent from '../CodeContent.vue';
 import { type CodeRenderParams, useCodeRender } from '../../utils/useCodeRender';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   path?: string;

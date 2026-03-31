@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
-    "hono": "^4.12.3"
+    "hono": "^4.12.3",
+    "vue-i18n": "^11.3.0"
   },
   "devDependencies": {
     "@iconify/vue": "^5.0.0",

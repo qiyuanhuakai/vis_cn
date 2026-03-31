@@ -1,5 +1,6 @@
 import { reactive, computed, markRaw, onUnmounted, type Component } from 'vue';
 import { renderWorkerHtml } from '../utils/workerRenderer';
+import { useI18n } from '../i18n/useI18n';
 
 export interface FloatingWindowEntry {
   key: string;
@@ -131,6 +132,7 @@ function resolveExpiresAt(
 }
 
 export function useFloatingWindows() {
+  const { t } = useI18n();
   const entriesMap = reactive(new Map<string, FloatingWindowEntry>());
   const entries = computed(() => [...entriesMap.values()].filter((e) => e.isReady));
   let extent: Extent = {
@@ -242,6 +244,10 @@ export function useFloatingWindows() {
           gutterMode: variantToGutterMode(merged.variant),
           lineOffset: merged.lineOffset,
           lineLimit: merged.lineLimit,
+          copyButtonLabel: t('render.copyCode'),
+          copiedLabel: t('render.copied'),
+          copyCodeAriaLabel: t('render.copyCodeAria'),
+          copyMarkdownAriaLabel: t('render.copyMarkdownAria'),
         });
         merged.isReady = true;
       } catch {
@@ -324,6 +330,10 @@ export function useFloatingWindows() {
         lang,
         theme: 'github-dark',
         gutterMode: variantToGutterMode(entry.variant),
+        copyButtonLabel: t('render.copyCode'),
+        copiedLabel: t('render.copied'),
+        copyCodeAriaLabel: t('render.copyCodeAria'),
+        copyMarkdownAriaLabel: t('render.copyMarkdownAria'),
       });
     } else {
       entry.resolvedHtml = text;
@@ -344,6 +354,10 @@ export function useFloatingWindows() {
         lang: lang || entry.lang!,
         theme: 'github-dark',
         gutterMode: variantToGutterMode(entry.variant),
+        copyButtonLabel: t('render.copyCode'),
+        copiedLabel: t('render.copied'),
+        copyCodeAriaLabel: t('render.copyCodeAria'),
+        copyMarkdownAriaLabel: t('render.copyMarkdownAria'),
       });
     } else {
       entry.resolvedHtml = newContent;

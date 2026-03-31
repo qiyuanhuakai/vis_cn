@@ -1,5 +1,6 @@
 import { type Ref, type WatchSource, onBeforeUnmount, ref, toRaw, watch } from 'vue';
 import { renderWorkerHtml } from './workerRenderer';
+import { useI18n } from '../i18n/useI18n';
 
 export type CodeRenderParams = {
   code: string;
@@ -23,6 +24,7 @@ export function useCodeRender(params: WatchSource<CodeRenderParams | null>): Cod
   const html = ref('');
   const error = ref('');
   let requestId = 0;
+  const { t } = useI18n();
 
   watch(
     params,
@@ -49,6 +51,11 @@ export function useCodeRender(params: WatchSource<CodeRenderParams | null>): Cod
         grepPattern: p.grepPattern,
         lineOffset: p.lineOffset,
         lineLimit: p.lineLimit,
+        copyButtonLabel: t('render.copyCode'),
+        copiedLabel: t('render.copied'),
+        copyCodeAriaLabel: t('render.copyCodeAria'),
+        copyMarkdownAriaLabel: t('render.copyMarkdownAria'),
+        errorLabel: t('render.renderFailed'),
       })
         .then((result) => {
           if (current !== requestId) return;
@@ -57,7 +64,7 @@ export function useCodeRender(params: WatchSource<CodeRenderParams | null>): Cod
         })
         .catch((err) => {
           if (current !== requestId) return;
-          error.value = err instanceof Error ? err.message : 'Render failed';
+          error.value = err instanceof Error ? err.message : t('render.renderFailed');
         });
     },
     { immediate: true },

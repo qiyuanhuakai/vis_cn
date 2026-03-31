@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CodeContent from '../CodeContent.vue';
+import { useI18n } from 'vue-i18n';
 
 defineProps<{
   html: string;
@@ -8,14 +9,16 @@ defineProps<{
   path?: string;
   include?: string;
 }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
   <div v-if="status === 'running'" class="tool-placeholder">
-    <div v-if="pattern">Pattern: {{ pattern }}</div>
-    <div v-if="path">Directory: {{ path }}</div>
-    <div v-if="include">Include: {{ include }}</div>
-    <div v-if="!pattern && !path && !include">Running...</div>
+    <div v-if="pattern">{{ t('toolWindow.glob.pattern') }} {{ pattern }}</div>
+    <div v-if="path">{{ t('toolWindow.glob.directory') }} {{ path }}</div>
+    <div v-if="include">{{ t('toolWindow.glob.includeLabel') }} {{ include }}</div>
+    <div v-if="!pattern && !path && !include">{{ t('toolWindow.glob.running') }}</div>
   </div>
   <CodeContent v-else :html="html" variant="term" />
 </template>

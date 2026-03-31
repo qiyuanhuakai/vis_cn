@@ -3,6 +3,7 @@ import type { ProjectState } from '../types/worker-state';
 import { waitForState } from '../utils/waitForState';
 
 type CreateSessionFn = (projectId: string) => Promise<{ id: string; projectId: string }>;
+type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
 
 function listSandboxes(project: ProjectState) {
   return Object.keys(project.sandboxes).map((key) => project.sandboxes[key]);
@@ -45,7 +46,9 @@ function findMostRecentSession(
 export function useSessionSelection(
   projects: Ref<Record<string, ProjectState>>,
   createSessionFn: CreateSessionFn,
+  translate?: TranslateFn,
 ) {
+  const t = translate ?? ((key: string) => key);
   const selectedProjectId = ref<string>('');
   const selectedSessionId = ref<string>('');
 
@@ -80,7 +83,7 @@ export function useSessionSelection(
     }
 
     if (!projectId) {
-      throw new Error('No available project for selection.');
+      throw new Error(t('errors.noAvailableProject'));
     }
 
     const targetProject = map[projectId];
@@ -88,7 +91,7 @@ export function useSessionSelection(
     if (ids.length > 0) {
       const sessionId = ids[0] ?? '';
       if (!sessionId) {
-        throw new Error('Failed to resolve session id from existing session.');
+        throw new Error(t('errors.failedToResolveSessionId'));
       }
       selectedProjectId.value = projectId;
       selectedSessionId.value = sessionId;
@@ -99,7 +102,7 @@ export function useSessionSelection(
     const createdProjectId = (created.projectId || projectId).trim();
     const createdSessionId = created.id.trim();
     if (!createdProjectId || !createdSessionId) {
-      throw new Error('Failed to resolve selection for created session.');
+      throw new Error(t('errors.failedToResolveCreatedSession'));
     }
     selectedProjectId.value = createdProjectId;
     selectedSessionId.value = createdSessionId;

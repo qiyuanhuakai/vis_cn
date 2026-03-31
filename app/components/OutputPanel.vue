@@ -51,7 +51,7 @@
           v-show="!isFollowing"
           type="button"
           class="follow-button"
-          aria-label="Scroll to latest"
+          :aria-label="$t('outputPanel.scrollToLatest')"
           @click="$emit('resume-follow')"
         >
           <Icon icon="lucide:arrow-down" :width="14" :height="14" />
@@ -71,6 +71,7 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import FileRefPopup from './FileRefPopup.vue';
 import StatusBar from './StatusBar.vue';
 import ThreadBlock from './ThreadBlock.vue';
@@ -88,6 +89,7 @@ import type {
 import type { MessageInfo } from '../types/sse';
 
 const msg = useMessages();
+const { t } = useI18n();
 
 const props = defineProps<{
   isFollowing: boolean;
@@ -215,6 +217,7 @@ const { getAssistantHtml, getDeferredTransitionKey } = useAssistantPreRenderer({
 const { thinkingDisplayText } = useThinkingAnimation(
   computed(() => props.isThinking),
   computed(() => props.busyDescendantCount ?? 0),
+  t,
 );
 
 function isRevertedRoot(root: MessageInfo): boolean {

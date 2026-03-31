@@ -23,6 +23,10 @@ const props = defineProps<{
   html?: string;
   files?: string[];
   copyButton?: boolean;
+  copyButtonLabel?: string;
+  copiedLabel?: string;
+  copyCodeAriaLabel?: string;
+  copyMarkdownAriaLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -92,6 +96,10 @@ async function startRender() {
     theme,
     gutterMode: 'none',
     files: props.files,
+    copyButtonLabel: props.copyButtonLabel,
+    copiedLabel: props.copiedLabel,
+    copyCodeAriaLabel: props.copyCodeAriaLabel,
+    copyMarkdownAriaLabel: props.copyMarkdownAriaLabel,
   })
     .then(async (html) => {
       if (current !== state.requestId) return;
