@@ -34,9 +34,10 @@ if (process.argv[2] === 'proxy') {
 serve(
   {
     fetch: app.fetch,
-    port: process.env.VIS_PORT || 3000,
+    port: process.env.VIS_PORT || 23003,
+    hostname: process.env.VIS_HOST || '127.0.0.1',
   },
   (info) => {
-    console.log(`Listening on http://localhost:${info.port}`);
+    console.log(`Listening on http://${info.address}:${info.port}`);
   },
 );
