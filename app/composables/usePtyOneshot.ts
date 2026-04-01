@@ -1,9 +1,9 @@
 import type { Ref } from 'vue';
 import * as opencodeApi from '../utils/opencode';
-import { useI18n } from '../i18n/useI18n';
 
 type UsePtyOneshotOptions = {
   activeDirectory: Ref<string>;
+  translate?: (key: string, params?: Record<string, unknown>) => string;
 };
 
 type PtyInfo = {
@@ -14,6 +14,7 @@ const PTY_ONESHOT_TIMEOUT_MS = 30000;
 const PTY_ONESHOT_EXIT_PREFIX = '__OPENCODE_PTY_EXIT_CODE__:';
 
 let boundOptions: UsePtyOneshotOptions | null = null;
+let translateFunction: ((key: string, params?: Record<string, unknown>) => string) | null = null;
 
 function parsePtyInfo(value: unknown): PtyInfo | null {
   if (!value || typeof value !== 'object') return null;
@@ -33,6 +34,13 @@ function getOptions() {
 function init(options: UsePtyOneshotOptions) {
   if (boundOptions) return;
   boundOptions = options;
+}
+
+function bindTranslate(
+  nextTranslate?: (key: string, params?: Record<string, unknown>) => string,
+) {
+  if (!nextTranslate || translateFunction) return;
+  translateFunction = nextTranslate;
 }
 
 function isCursorMetaBytes(bytes: Uint8Array) {
@@ -98,10 +106,23 @@ function extractOneShotExitCode(output: string): { output: string; exitCode: num
   };
 }
 
+function translate(messageKey: string, params?: Record<string, unknown>) {
+  if (!translateFunction) {
+    const lastPart = messageKey.split('.').pop() || messageKey;
+    if (!params) return lastPart;
+    return Object.entries(params).reduce((acc, [key, value]) => {
+      return acc.replace(`{${key}}`, String(value));
+    }, lastPart);
+  }
+  return translateFunction(messageKey, params);
+}
+
 export function usePtyOneshot(options?: UsePtyOneshotOptions) {
-  if (options) init(options);
+  if (options) {
+    init(options);
+    bindTranslate(options.translate);
+  }
   getOptions();
-  const { t } = useI18n();
 
   async function runOneShotPtyCommand(command: string, args: string[]): Promise<string> {
     const { activeDirectory } = getOptions();
@@ -124,7 +145,7 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
     });
     const pty = parsePtyInfo(data);
     if (!pty) {
-      throw new Error(t('errors.ptyCreateFailed'));
+      throw new Error(translate('errors.ptyCreateFailed'));
     }
 
     return new Promise<string>((resolve, reject) => {
@@ -143,7 +164,7 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
 
       const timeoutId = setTimeout(() => {
         console.error('[pty-oneshot] command timed out:', command, args);
-        settle(() => reject(new Error(t('errors.ptyCommandTimedOut'))));
+        settle(() => reject(new Error(translate('errors.ptyCommandTimedOut'))));
         socket.close();
       }, PTY_ONESHOT_TIMEOUT_MS);
 
@@ -179,7 +200,7 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
       });
       socket.addEventListener('error', () => {
         console.error('[pty-oneshot] command socket error:', command, args);
-        settle(() => reject(new Error(t('errors.ptySocketFailed'))));
+        settle(() => reject(new Error(translate('errors.ptySocketFailed'))));
       });
     });
   }

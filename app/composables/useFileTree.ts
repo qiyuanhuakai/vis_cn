@@ -1062,7 +1062,7 @@ async function reloadTree() {
 function initializeFileTree(options: UseFileTreeOptions) {
   if (boundOptions) return;
   boundOptions = options;
-  usePtyOneshot({ activeDirectory: options.activeDirectory });
+  usePtyOneshot({ activeDirectory: options.activeDirectory, translate: tFunction ?? undefined });
   watch(
     () => options.activeDirectory.value,
     (directory) => {
@@ -1107,14 +1107,16 @@ function getT() {
   return tFunction;
 }
 
+
+
 export function useFileTree(options?: UseFileTreeOptions) {
+  const { t } = useI18n();
+  tFunction = t;
+
   if (options) initializeFileTree(options);
   if (!boundOptions) {
     throw new Error('useFileTree is not initialized');
   }
-
-  const { t } = useI18n();
-  tFunction = t;
 
   return {
     treeNodes,

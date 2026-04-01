@@ -455,6 +455,24 @@ const FILE_SNAPSHOT_SCRIPT = [
   'fi',
 ].join('\n');
 type WorktreeSnapshotMode = 'staged' | 'changes' | 'all';
+
+function shellEscapeForSingleQuotes(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function normalizeShellTitle(value: string): string {
+  let normalized = '';
+  for (const char of value) {
+    const code = char.codePointAt(0);
+    if (code === undefined || code < 0x20 || code === 0x7f) {
+      normalized += ' ';
+      continue;
+    }
+    normalized += char;
+  }
+  return normalized;
+}
+
 function buildWorktreeSnapshotScript(mode: WorktreeSnapshotMode, translate: (key: string) => string): string {
   const title =
     mode === 'staged'
@@ -462,6 +480,7 @@ function buildWorktreeSnapshotScript(mode: WorktreeSnapshotMode, translate: (key
       : mode === 'changes'
         ? translate('app.git.unstagedChanges')
         : translate('app.git.workingTree');
+  const escapedTitle = shellEscapeForSingleQuotes(normalizeShellTitle(title));
   // Filter logic: which files to include based on mode
   // x = index status (1st column), y = worktree status (2nd column)
   let filterLines: string[];
@@ -525,7 +544,7 @@ function buildWorktreeSnapshotScript(mode: WorktreeSnapshotMode, translate: (key
     'stty -opost -echo 2>/dev/null',
     'export GIT_PAGER=cat',
     'export GIT_TERMINAL_PROMPT=0',
-    `printf "##TITLE\\t${title}\\n"`,
+    `printf "##TITLE\\t%s\\n" ${escapedTitle}`,
     'git --no-pager status --porcelain=v1 2>/dev/null | while IFS= read -r line; do',
     '  [ -z "$line" ] && continue',
     '  x=${line%"${line#?}"}',
@@ -1258,7 +1277,7 @@ const treeDirectoryName = computed(() => {
   return segments.at(-1) ?? '/';
 });
 
-const { runOneShotPtyCommand } = usePtyOneshot({ activeDirectory });
+const { runOneShotPtyCommand } = usePtyOneshot({ activeDirectory, translate: t });
 
 const sessionRevert = computed<SessionInfo['revert'] | null>(() => {
   const projectId = selectedProjectId.value.trim();
@@ -4984,17 +5003,18 @@ async function openGitDiff(payload: { path: string; staged: boolean }) {
     return;
   }
 
-  const mode = staged ? t('app.git.staged') : t('app.git.unstaged');
+  const snapshotMode: WorktreeSnapshotMode = staged ? 'staged' : 'changes';
+  const modeLabel = staged ? t('app.git.staged') : t('app.git.unstaged');
   const pos = getFileViewerPosition();
   await fw.open(key, {
-    content: t('app.git.loadingDiff', { mode, path }),
+    content: t('app.git.loadingDiff', { mode: modeLabel, path }),
     lang: 'text',
     variant: 'plain',
     closable: true,
     resizable: true,
     focusOnOpen: true,
     scroll: 'manual',
-    title: `${path} (${mode})`,
+    title: `${path} (${modeLabel})`,
     x: pos.x,
     y: pos.y,
     width: FILE_VIEWER_WINDOW_WIDTH,
@@ -5009,7 +5029,7 @@ async function openGitDiff(payload: { path: string; staged: boolean }) {
       '-c',
       FILE_SNAPSHOT_SCRIPT,
       '_',
-      mode,
+      snapshotMode,
       path,
     ]);
     const snapshot = parseFileSnapshotOutput(output);
@@ -5031,7 +5051,7 @@ async function openGitDiff(payload: { path: string; staged: boolean }) {
       resizable: true,
       focusOnOpen: true,
       scroll: 'manual',
-      title: `${path} (${mode})`,
+      title: `${path} (${modeLabel})`,
       x: pos.x,
       y: pos.y,
       width: FILE_VIEWER_WINDOW_WIDTH,
