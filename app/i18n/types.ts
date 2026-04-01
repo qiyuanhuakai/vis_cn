@@ -589,6 +589,9 @@ export interface LocaleMessages {
   };
   outputPanel: {
     scrollToLatest: string;
+    loadOlder: string;
+    loadingOlder: string;
+    loadOlderFailed: string;
   };
   errors: {
     timedOut: string;
@@ -596,6 +599,7 @@ export interface LocaleMessages {
     ptyCreateFailed: string;
     ptyCommandTimedOut: string;
     ptySocketFailed: string;
+    ptyCommandFailed: string;
     sseUrlEmpty: string;
     sseConnectFailed: string;
     sseConnectionAborted: string;

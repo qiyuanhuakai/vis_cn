@@ -83,6 +83,7 @@ async function sendJson(
     method,
     headers: buildHeaders(options.request, 'application/json'),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.request?.signal,
   });
   if (!response.ok) throw new Error(`${path} request failed (${response.status})`);
   return parseJson(response);
@@ -316,7 +317,7 @@ export function createPty(payload: {
   command?: string;
   args?: string[];
   title?: string;
-}) {
+}, request?: RequestOptions) {
   return sendJson('/pty', 'POST', {
     params: { directory: payload.directory },
     body: {
@@ -325,6 +326,7 @@ export function createPty(payload: {
       cwd: payload.cwd,
       title: payload.title,
     },
+    request,
   }) as Promise<unknown>;
 }
 

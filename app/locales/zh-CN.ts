@@ -561,6 +561,7 @@ const messages: LocaleMessages = {
     ptyCreateFailed: '创建 PTY 命令会话失败',
     ptyCommandTimedOut: 'PTY 命令超时',
     ptySocketFailed: 'PTY 命令套接字失败',
+    ptyCommandFailed: 'PTY 命令失败，退出码 {{exitCode}}',
     sseUrlEmpty: 'SSE 基础 URL 为空。',
     sseConnectFailed: '无法连接到 SSE 流。',
     sseConnectionAborted: 'SSE 连接已中止。',
@@ -650,6 +651,9 @@ const messages: LocaleMessages = {
   },
   outputPanel: {
     scrollToLatest: '滚动到最新',
+    loadOlder: '加载更早历史',
+    loadingOlder: '正在加载更早历史...',
+    loadOlderFailed: '加载更早历史失败。',
   },
   welcome: {
     title: '如何使用 OpenCode Visualizer',

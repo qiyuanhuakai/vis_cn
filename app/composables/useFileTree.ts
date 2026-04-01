@@ -843,6 +843,7 @@ async function refreshBranchEntries() {
   const directory = activeDirectory.value.trim();
   if (!directory) {
     branchEntries.value = [];
+    branchListLoading.value = false;
     return;
   }
 
@@ -1069,6 +1070,13 @@ function initializeFileTree(options: UseFileTreeOptions) {
       clearScheduledDirectoryReloads();
       clearScheduledGitStatusReload();
 
+      fileCacheBuildId += 1;
+      gitStatusGeneration += 1;
+      gitFileListGeneration += 1;
+      branchListGeneration += 1;
+      treeLoading.value = false;
+      branchListLoading.value = false;
+
       treeNodes.value = [];
       expandedTreePathSet.value = new Set();
       selectedTreePath.value = '';
@@ -1081,7 +1089,6 @@ function initializeFileTree(options: UseFileTreeOptions) {
 
       const activePath = directory.trim();
       if (!activePath) {
-        treeLoading.value = false;
         return;
       }
       void reloadTree();

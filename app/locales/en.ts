@@ -561,6 +561,7 @@ const messages: LocaleMessages = {
     ptyCreateFailed: 'Failed to create PTY command session',
     ptyCommandTimedOut: 'PTY command timed out',
     ptySocketFailed: 'PTY command socket failed',
+    ptyCommandFailed: 'PTY command failed with exit code {{exitCode}}',
     sseUrlEmpty: 'SSE base URL is empty.',
     sseConnectFailed: 'Failed to connect to SSE stream.',
     sseConnectionAborted: 'SSE connection aborted.',
@@ -650,6 +651,9 @@ const messages: LocaleMessages = {
   },
   outputPanel: {
     scrollToLatest: 'Scroll to latest',
+    loadOlder: 'Load older history',
+    loadingOlder: 'Loading older history...',
+    loadOlderFailed: 'Failed to load older history.',
   },
   welcome: {
     title: 'How To Use OpenCode Visualizer',

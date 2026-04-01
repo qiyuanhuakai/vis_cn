@@ -102,8 +102,12 @@
                     :resolve-model-meta="resolveModelMetaForPath"
                     :compute-context-percent="computeContextPercent"
                     :session-revert="sessionRevert"
+                    :history-has-more="historyHasMore"
+                    :history-loading-more="historyLoadingMore"
+                    :history-load-error="historyLoadError"
                     @message-rendered="handleOutputPanelMessageRendered"
                     @resume-follow="handleOutputPanelResumeFollow"
+                    @load-more-history="handleOutputPanelLoadMoreHistory"
                     @fork-message="handleForkMessage"
                     @revert-message="handleRevertMessage"
                     @undo-revert="handleUndoRevert"
@@ -405,6 +409,8 @@ const TERM_WINDOW_BORDER_PX = 2;
 const TERM_INNER_PADDING_X_PX = 4;
 const TERM_INNER_PADDING_Y_PX = 4;
 const TERM_GUTTER_WIDTH_EM = 3.2;
+const INITIAL_HISTORY_LIMIT = 200;
+const HISTORY_LOAD_STEP = 200;
 const TERM_FONT_FAMILY =
   "'JetBrainsMono NFM', 'CaskaydiaCove NFM', 'IosevkaTerm Nerd Font', 'Iosevka Term', 'Iosevka Fixed', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace";
 const SHELL_LINGER_MS = 1000;
@@ -744,12 +750,20 @@ function handleOutputPanelContentResized() {
   notifyContentChange();
 }
 
+function handleOutputPanelLoadMoreHistory() {
+  void loadMoreHistory();
+}
+
 const runningToolIds = reactive(new Set<string>());
 
 type MessageDiffEntry = { file: string; diff: string; before?: string; after?: string };
 
 const userMessageMetaById = ref<Record<string, UserMessageMeta>>({});
 const userMessageTimeById = ref<Record<string, number>>({});
+const historyLoadLimit = ref(INITIAL_HISTORY_LIMIT);
+const historyHasMore = ref(false);
+const historyLoadingMore = ref(false);
+const historyLoadError = ref('');
 const globalEventUnsubscribers: Array<() => void> = [];
 
 const inputResizeState = ref<{
@@ -3271,8 +3285,10 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
   const requestedDirectory = !isSubagentMessage ? getSelectedWorktreeDirectory() : '';
   try {
     const directory = getSelectedWorktreeDirectory();
+    const limit = !isSubagentMessage ? historyLoadLimit.value : undefined;
     const data = (await opencodeApi.listSessionMessages(sessionId, {
       directory: directory || undefined,
+      limit,
     })) as Array<Record<string, unknown>>;
     if (!Array.isArray(data)) return;
     if (!isSubagentMessage) {
@@ -3281,6 +3297,11 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
       if (getSelectedWorktreeDirectory() !== requestedDirectory) return;
     }
     msg.loadHistory(data);
+
+    if (!isSubagentMessage) {
+      historyLoadError.value = '';
+      historyHasMore.value = typeof limit === 'number' && data.length >= limit;
+    }
 
     data.forEach((message) => {
       const info = message.info as Record<string, unknown> | undefined;
@@ -3296,7 +3317,36 @@ async function fetchHistory(sessionId: string, isSubagentMessage = false) {
       notifyContentChange(false);
     }
   } catch (error) {
+    if (!isSubagentMessage) {
+      historyLoadError.value = t('outputPanel.loadOlderFailed');
+    }
     log('History load failed', error);
+  }
+}
+
+function resetHistoryLazyState() {
+  historyLoadLimit.value = INITIAL_HISTORY_LIMIT;
+  historyHasMore.value = false;
+  historyLoadingMore.value = false;
+  historyLoadError.value = '';
+}
+
+async function loadMoreHistory() {
+  const sessionId = selectedSessionId.value;
+  if (!sessionId) return;
+  if (historyLoadingMore.value) return;
+  if (!historyHasMore.value) return;
+  historyLoadingMore.value = true;
+  historyLoadError.value = '';
+  historyLoadLimit.value += HISTORY_LOAD_STEP;
+  const targetLimit = historyLoadLimit.value;
+  try {
+    await fetchHistory(sessionId);
+  } finally {
+    historyLoadingMore.value = false;
+    if (historyLoadError.value) {
+      historyLoadLimit.value = Math.max(INITIAL_HISTORY_LIMIT, targetLimit - HISTORY_LOAD_STEP);
+    }
   }
 }
 
@@ -4489,6 +4539,7 @@ async function reloadSelectedSessionState() {
   todosBySessionId.value = {};
   todoLoadingBySessionId.value = {};
   todoErrorBySessionId.value = {};
+  resetHistoryLazyState();
   if (selectedSessionId.value) {
     const sessionId = selectedSessionId.value;
     await fetchHistory(sessionId);

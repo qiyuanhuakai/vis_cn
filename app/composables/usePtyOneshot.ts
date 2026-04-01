@@ -11,6 +11,7 @@ type PtyInfo = {
 };
 
 const PTY_ONESHOT_TIMEOUT_MS = 30000;
+const PTY_CREATE_TIMEOUT_MS = 10000;
 const PTY_ONESHOT_EXIT_PREFIX = '__OPENCODE_PTY_EXIT_CODE__:';
 
 let boundOptions: UsePtyOneshotOptions | null = null;
@@ -127,22 +128,41 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
   async function runOneShotPtyCommand(command: string, args: string[]): Promise<string> {
     const { activeDirectory } = getOptions();
     const directory = activeDirectory.value || undefined;
-    const data = await opencodeApi.createPty({
-      directory,
-      command: 'env',
-      args: [
-        'bash',
-        '--noprofile',
-        '--norc',
-        '-c',
-        `stty -echo 2>/dev/null; read -r -t 1 _ || true; "$@"; code=$?; printf '\n${PTY_ONESHOT_EXIT_PREFIX}%s\n' "$code"; exit "$code"`,
-        '_',
-        command,
-        ...args,
-      ],
-      cwd: directory,
-      title: 'One-shot PTY',
-    });
+    const createPtyAbort = new AbortController();
+    const createPtyTimeoutId = setTimeout(() => {
+      createPtyAbort.abort();
+    }, PTY_CREATE_TIMEOUT_MS);
+
+    let data: unknown;
+    try {
+      data = await opencodeApi.createPty(
+        {
+          directory,
+          command: 'env',
+          args: [
+            'bash',
+            '--noprofile',
+            '--norc',
+            '-c',
+            `stty -echo 2>/dev/null; read -r -t 1 _ || true; "$@"; code=$?; printf '\n${PTY_ONESHOT_EXIT_PREFIX}%s\n' "$code"; exit "$code"`,
+            '_',
+            command,
+            ...args,
+          ],
+          cwd: directory,
+          title: 'One-shot PTY',
+        },
+        { signal: createPtyAbort.signal },
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(t('errors.ptyCommandTimedOut'));
+      }
+      throw error;
+    } finally {
+      clearTimeout(createPtyTimeoutId);
+    }
+
     const pty = parsePtyInfo(data);
     if (!pty) {
       throw new Error(translate('errors.ptyCreateFailed'));
@@ -154,12 +174,20 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
       const decoder = new TextDecoder();
       let captured = '';
       let settled = false;
+      let opened = false;
+      let sawExitMarker = false;
+      let exitCode: number | null = null;
+
+      const cleanup = () => {
+        opencodeApi.deletePty(pty.id, directory).catch(() => {});
+      };
 
       const settle = (handler: () => void) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
         handler();
+        cleanup();
       };
 
       const timeoutId = setTimeout(() => {
@@ -170,8 +198,14 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
 
       socket.binaryType = 'arraybuffer';
       socket.addEventListener('open', () => {
+        opened = true;
         if (socket.readyState !== WebSocket.OPEN) return;
-        socket.send('\n');
+        try {
+          socket.send('\n');
+        } catch {
+          settle(() => reject(new Error(t('errors.ptySocketFailed'))));
+          socket.close();
+        }
       });
       socket.addEventListener('message', (event) => {
         if (event.data instanceof ArrayBuffer) {
@@ -184,17 +218,37 @@ export function usePtyOneshot(options?: UsePtyOneshotOptions) {
         if (isCursorMetaString(event.data)) return;
         captured += event.data;
       });
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event: CloseEvent) => {
         settle(() => {
           captured += decoder.decode();
           const parsed = extractOneShotExitCode(captured);
-          if (parsed.exitCode !== null && parsed.exitCode !== 0) {
+          sawExitMarker = parsed.exitCode !== null;
+          exitCode = parsed.exitCode;
+
+          if (!opened) {
+            reject(new Error(t('errors.ptySocketFailed')));
+            return;
+          }
+
+          if (!sawExitMarker && !event.wasClean) {
+            reject(new Error(t('errors.ptySocketFailed')));
+            return;
+          }
+
+          if (exitCode !== null && exitCode !== 0) {
             console.error(
-              `[pty-oneshot] command exited with non-zero code ${parsed.exitCode}:`,
+              `[pty-oneshot] command exited with non-zero code ${exitCode}:`,
               command,
               args,
             );
+            const err = new Error(
+              t('errors.ptyCommandFailed', { exitCode: String(exitCode) }),
+            );
+            (err as Error & { output?: string }).output = parsed.output;
+            reject(err);
+            return;
           }
+
           resolve(parsed.output);
         });
       });

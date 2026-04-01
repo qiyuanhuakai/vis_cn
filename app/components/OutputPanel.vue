@@ -13,6 +13,19 @@
           @touchmove="$emit('touchmove')"
         >
           <div ref="contentEl" class="output-panel-content" @click="handleContentClick">
+            <button
+              v-if="!initialRenderTrackingActive && historyHasMore"
+              type="button"
+              class="history-load-more"
+              :disabled="historyLoadingMore"
+              @click="emit('load-more-history')"
+            >
+              {{ historyLoadingMore ? t('outputPanel.loadingOlder') : t('outputPanel.loadOlder') }}
+            </button>
+            <p v-if="!initialRenderTrackingActive && historyLoadError" class="history-load-error">
+              {{ historyLoadError }}
+            </p>
+
             <div
               v-if="initialRenderTrackingActive"
               class="absolute w-full h-full m-auto flex justify-center items-center"
@@ -108,6 +121,9 @@ const props = defineProps<{
   ) => number | null;
   projectName?: string;
   projectColor?: string;
+  historyHasMore?: boolean;
+  historyLoadingMore?: boolean;
+  historyLoadError?: string;
   sessionRevert?: {
     messageID: string;
     partID?: string;
@@ -132,6 +148,7 @@ const emit = defineEmits<{
   (event: 'message-rendered'): void;
   (event: 'content-resized'): void;
   (event: 'initial-render-complete'): void;
+  (event: 'load-more-history'): void;
 }>();
 
 const visibleRoots = computed(() => msg.roots.value);
@@ -242,9 +259,15 @@ const fileRefPopupRef = ref<{
   closeFilePopup: () => void;
 } | null>(null);
 let contentResizeObserver: ResizeObserver | undefined;
+const LOAD_MORE_SCROLL_TOP_THRESHOLD = 40;
 
 function handleScroll() {
   emit('scroll');
+  const panel = panelEl.value;
+  if (!panel) return;
+  if (!historyHasMore.value || historyLoadingMore.value) return;
+  if (panel.scrollTop > LOAD_MORE_SCROLL_TOP_THRESHOLD) return;
+  emit('load-more-history');
 }
 
 function handleContentClick(event: MouseEvent) {
@@ -306,6 +329,9 @@ const statusText = computed(() => props.statusText);
 const isStatusError = computed(() => props.isStatusError);
 const isRetryStatus = computed(() => props.isRetryStatus);
 const isFollowing = computed(() => props.isFollowing);
+const historyHasMore = computed(() => Boolean(props.historyHasMore));
+const historyLoadingMore = computed(() => Boolean(props.historyLoadingMore));
+const historyLoadError = computed(() => props.historyLoadError?.trim() ?? '');
 
 defineExpose({ panelEl });
 </script>
@@ -372,6 +398,34 @@ defineExpose({ panelEl });
   flex-direction: column;
   gap: 6px;
   padding: 8px 12px 12px;
+}
+
+.history-load-more {
+  align-self: center;
+  font-size: 12px;
+  line-height: 1;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.history-load-more:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.history-load-more:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.history-load-error {
+  align-self: center;
+  color: #fca5a5;
+  font-size: 12px;
+  margin: 0;
 }
 
 .output-panel-content :deep(.markdown-host code.file-ref) {
