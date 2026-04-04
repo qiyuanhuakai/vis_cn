@@ -347,7 +347,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted } from 'vue';
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@iconify/vue';
 
@@ -472,9 +472,30 @@ function updateContainerHeight() {
   containerHeight.value = scrollContainerRef.value.clientHeight;
 }
 
+let containerResizeObserver: ResizeObserver | undefined;
+
+function setupContainerResizeObserver() {
+  containerResizeObserver?.disconnect();
+  containerResizeObserver = undefined;
+  if (typeof ResizeObserver === 'undefined') return;
+  const target = scrollContainerRef.value;
+  if (!target) return;
+  containerResizeObserver = new ResizeObserver(() => {
+    updateContainerHeight();
+  });
+  containerResizeObserver.observe(target);
+}
+
 onMounted(() => {
   updateContainerHeight();
+  setupContainerResizeObserver();
   window.addEventListener('resize', updateContainerHeight);
+});
+
+onBeforeUnmount(() => {
+  containerResizeObserver?.disconnect();
+  containerResizeObserver = undefined;
+  window.removeEventListener('resize', updateContainerHeight);
 });
 
 // Watch for data changes and scroll selected into view
